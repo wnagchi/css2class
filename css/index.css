@@ -1,0 +1,16 @@
+
+.h-700{
+    height:700px;
+}
+
+.color-red{
+  color:red  
+}                
+
+.flex{
+    display:flex
+}        
+
+.flex_cen{
+    align-items: center;justify-content: center;
+}        
