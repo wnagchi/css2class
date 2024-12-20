@@ -1,31 +1,39 @@
-# 偶然间想出的小功能 没想到还撞车了 
-### 还在被需要不断命名新的class，书写复用性低的css所困扰吗
-## 简介
-### 不多说了 看演示：
+## A Little Feature That Came Up By Chance, Didn't Expect It To Be Common
+
+### Are you still troubled by the need to constantly name new classes and write CSS with low reusability?
+
+## Introduction
+
+### No more talking, see the demo:
 ![enter description here](https://z3.ax1x.com/2021/08/10/ft65OH.gif)
-##### 根据书写的class规则 实时生成css文件 原子写法大大降低了耦合程度
-# 解放双手 
+##### Real-time generation of CSS files based on the written class rules. The atomic writing method greatly reduces the degree of coupling.
+
+# Free Your Hands
+
+## Start
+
+Install
+
+npm i
 
 
-## 开始
-安装
-
-	npm i
-	
 ![enter description here](https://z3.ax1x.com/2021/08/10/ft6bkt.png)
 
-##### path:目标html位置 （不局限于html 小程序的wxml等其他文档类型文件都可以）
-##### cssOutPath:输出的样式文件目录
-##### fileName:需要生成的文件名称 （不仅限于css scss less wxss 等都可以）
-##### compression:是否压缩样式
-##### baseUnit:配置出现最多的--单位
-##### className:class生成规则
+##### path: The location of the target HTML (not limited to HTML, other document types like mini-program wxml are also applicable)
+
+##### cssOutPath: The output directory of the style file
+
+##### fileName: The name of the file to be generated (not limited to css, scss, less, wxss, etc.)
+
+##### compression: Whether to compress styles
+
+##### baseUnit: Configure the most frequently appearing unit
+
+##### className: Class generation rules
+
+### After completing the configuration
+
+npm run css2class
 
 
-### 配置完成之后
-	npm run css2class
-
-# 开始放飞自我吧
-
-	
-	
+# Start to let your creativity fly
