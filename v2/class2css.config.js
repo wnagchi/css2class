@@ -26,7 +26,7 @@ const config = {
     // ========== 输出配置 ==========
     output: {
         //文件输出目录
-        path: "../dist",
+        path: "D:/code/membership-weapp/subpackages/portal/lib",
         // 输出文件信息 可设置文件名，扩展名
         fileName: "commom12.wxss",
     },
@@ -41,7 +41,7 @@ const config = {
     multiFile: {
         entry: {
             // 监听文件的目录
-            path: "../MP/subpackages/portal",
+            path: "D:/code/membership-weapp/subpackages/portal", 
             // 需要监听的文件名
             // fileName:[
             //     'index1.html'
@@ -57,7 +57,7 @@ const config = {
             cssOutType: "uniFile",
             //文件输出目录
             // 如果填写该目录 css文件就会生成到该目录下
-            path: "../MP/subpackages/portal/lib",
+            path: "D:/code/membership-weapp/subpackages/portal/lib",
             // 输出文件名 cssOutType为uniFile的情况下生效
             fileName: "index.wxss",
             // 输出文件格式 在cssOutType为filePath的情况下生效
@@ -178,6 +178,7 @@ const config = {
         'h-full': "height: 100%;",
         'w-screen': "width: 100vw;",
         'h-screen': "height: 100vh;",
+        'font-runyuan':"font-family: 'HYRunYuan-BOLD';",
 
         // Flexbox - Tailwind风格
         "flex-cen": "align-items: center;justify-content: center;",
@@ -195,6 +196,17 @@ const config = {
         "justify-between": "justify-content: space-between;",
         "justify-around": "justify-content: space-around;",
         "justify-evenly": "justify-content: space-evenly;",
+
+
+        "grid-cols-4":"grid-template-columns: repeat(4, 1fr);",
+        "grid-cols-2":"grid-template-columns: repeat(2, 1fr);",
+        "grid-cols-3":"grid-template-columns: repeat(3, 1fr);",
+        "grid-cols-5":"grid-template-columns: repeat(5, 1fr);",
+        "grid-cols-6":"grid-template-columns: repeat(6, 1fr);",
+        "grid-cols-7":"grid-template-columns: repeat(7, 1fr);",
+        "grid-cols-8":"grid-template-columns: repeat(8, 1fr);",
+        "grid-cols-9":"grid-template-columns: repeat(9, 1fr);",
+        "grid-cols-10":"grid-template-columns: repeat(10, 1fr);",
 
         // 定位 - Tailwind风格
         static: "position: static;",
