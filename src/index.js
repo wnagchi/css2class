@@ -21,6 +21,9 @@ class Class2CSS {
     this.options = options;
     this.isInitialized = false;
     this.isRunning = false;
+    
+    // 构建时间追踪：存储文件路径到开始时间的映射
+    this.buildStartTimes = new Map();
 
     // 初始化核心模块
     this.initializeModules();
@@ -179,10 +182,38 @@ class Class2CSS {
     // 文件写入相关事件
     this.eventBus.on('file:css:written', (data) => {
       this.logger.info(`CSS 已写入: ${data.outputFile} (${data.cssLength} 字符)`);
+      
+      // 计算并记录构建时间（统一文件模式跳过，由 unifiedWriter:completed 处理）
+      if (data.sourceFile !== 'unified-output') {
+        this.logBuildTime(data.sourceFile, data.outputFile);
+      }
     });
 
     this.eventBus.on('file:css:write:error', (data) => {
       this.logger.error(`CSS 写入错误 ${data.sourceFile}: ${data.error}`);
+      // 清除构建时间记录
+      this.buildStartTimes.delete(data.sourceFile);
+    });
+    
+    // 统一文件写入完成事件
+    this.eventBus.on('unifiedWriter:completed', (data) => {
+      // 统一文件模式：计算所有待处理文件的构建时间
+      if (data.processedFiles && data.processedFiles.length > 0) {
+        const buildTime = this.calculateBuildTimeForUnified(data.processedFiles);
+        if (buildTime !== null) {
+          this.logger.info(`📦 统一文件构建完成: ${data.cssLength} 字符, ${data.classCount} 个类, 耗时 ${buildTime}ms`);
+        }
+      }
+    });
+    
+    // 统一文件写入错误事件
+    this.eventBus.on('unifiedWriter:error', (data) => {
+      // 清除所有待处理文件的构建时间记录
+      if (data.pendingWrites && data.pendingWrites.length > 0) {
+        for (const filePath of data.pendingWrites) {
+          this.buildStartTimes.delete(filePath);
+        }
+      }
     });
 
     // 配置监听相关事件
@@ -397,6 +428,9 @@ class Class2CSS {
     }
 
     try {
+      // 记录构建开始时间
+      this.buildStartTimes.set(filePath, Date.now());
+      
       this.logger.info(`正在处理文件变更: ${filePath}`);
 
       // 解析文件
@@ -460,7 +494,46 @@ class Class2CSS {
       }
     } catch (error) {
       this.logger.errorWithContext(`处理文件变更时出错: ${filePath}`, error);
+      // 清除构建时间记录
+      this.buildStartTimes.delete(filePath);
     }
+  }
+
+  // 记录构建时间
+  logBuildTime(sourceFile, outputFile) {
+    const startTime = this.buildStartTimes.get(sourceFile);
+    if (startTime) {
+      const buildTime = Date.now() - startTime;
+      this.logger.info(`⏱️  构建完成: ${sourceFile} -> ${outputFile}, 耗时 ${buildTime}ms`);
+      this.buildStartTimes.delete(sourceFile);
+    }
+  }
+  
+  // 计算统一文件模式的构建时间（取最早开始时间）
+  calculateBuildTimeForUnified(filePaths) {
+    if (!filePaths || filePaths.length === 0) {
+      return null;
+    }
+    
+    // 找到最早的开始时间
+    let earliestStartTime = null;
+    for (const filePath of filePaths) {
+      const startTime = this.buildStartTimes.get(filePath);
+      if (startTime && (earliestStartTime === null || startTime < earliestStartTime)) {
+        earliestStartTime = startTime;
+      }
+    }
+    
+    if (earliestStartTime) {
+      const buildTime = Date.now() - earliestStartTime;
+      // 清除所有相关文件的构建时间记录
+      for (const filePath of filePaths) {
+        this.buildStartTimes.delete(filePath);
+      }
+      return buildTime;
+    }
+    
+    return null;
   }
 
   // 获取状态信息
