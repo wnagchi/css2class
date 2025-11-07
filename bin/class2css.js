@@ -12,6 +12,10 @@ function parseArgs() {
     watch: true,
     help: false,
     version: false,
+    inputPath: null,
+    outputPath: null,
+    outputFileName: null,
+    outputType: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -24,6 +28,22 @@ function parseArgs() {
         break;
       case '--no-watch':
         options.watch = false;
+        break;
+      case '--input':
+      case '-i':
+        options.inputPath = args[++i];
+        break;
+      case '--output':
+      case '-o':
+        options.outputPath = args[++i];
+        break;
+      case '--output-file':
+      case '-f':
+        options.outputFileName = args[++i];
+        break;
+      case '--output-type':
+      case '-t':
+        options.outputType = args[++i];
         break;
       case '--help':
       case '-h':
@@ -52,18 +72,26 @@ Class2CSS - Dynamic CSS Generator for WeChat Mini Program
 Usage: class2css [options]
 
 Options:
-  -c, --config <path>     Configuration file path (default: ./class2css.config.js)
-  --no-watch              Disable file watching mode
-  -h, --help              Show this help message
-  -v, --version           Show version information
+  -c, --config <path>         Configuration file path (default: ./class2css.config.js)
+  -i, --input <path>         Override input directory path (runtime override)
+  -o, --output <path>        Override output directory path (runtime override)
+  -f, --output-file <name>   Override output file name (runtime override)
+  -t, --output-type <type>   Override output type: filePath or uniFile (runtime override)
+  --no-watch                 Disable file watching mode
+  -h, --help                 Show this help message
+  -v, --version              Show version information
 
 Examples:
-  class2css                    # Run with default config
-  class2css -c ./config.js     # Run with custom config
-  class2css --no-watch         # Run without file watching
+  class2css                                    # Run with default config
+  class2css -c ./config.js                     # Run with custom config
+  class2css --no-watch                         # Run without file watching
+  class2css -i ./src -o ./dist                 # Override input and output directories
+  class2css -i ./pages -o ./styles -f app.wxss # Override input, output and filename
+  class2css -i ./src -o ./dist -t uniFile     # Override input, output and output type
 
 Configuration:
   The tool reads configuration from class2css.config.js by default.
+  Runtime overrides (--input, --output, etc.) will override values in the config file.
   See documentation for configuration options.
 `);
 }
@@ -123,6 +151,52 @@ async function main() {
         enableTimestamp: true,
       },
     });
+
+    // 应用运行时配置覆盖
+    if (options.inputPath || options.outputPath || options.outputFileName || options.outputType) {
+      const overrides = {};
+      
+      // 解析输入路径为绝对路径
+      if (options.inputPath) {
+        overrides.inputPath = path.isAbsolute(options.inputPath)
+          ? path.normalize(options.inputPath)
+          : path.resolve(process.cwd(), options.inputPath);
+      }
+      
+      // 解析输出路径为绝对路径
+      if (options.outputPath) {
+        overrides.outputPath = path.isAbsolute(options.outputPath)
+          ? path.normalize(options.outputPath)
+          : path.resolve(process.cwd(), options.outputPath);
+      }
+      
+      if (options.outputFileName) {
+        overrides.outputFileName = options.outputFileName;
+      }
+      
+      if (options.outputType) {
+        if (options.outputType !== 'filePath' && options.outputType !== 'uniFile') {
+          console.error(`❌ Invalid output type: ${options.outputType}. Must be 'filePath' or 'uniFile'`);
+          process.exit(1);
+        }
+        overrides.outputType = options.outputType;
+      }
+      
+      class2css.configManager.overrideConfig(overrides);
+      
+      // 如果输出类型改变，更新统一文件模式状态
+      if (options.outputType) {
+        const isUnifiedMode = options.outputType === 'uniFile';
+        class2css.stateManager.setUnifiedFileMode(isUnifiedMode);
+      }
+      
+      // 显示运行时覆盖信息
+      console.log('⚙️  Runtime overrides applied:');
+      if (overrides.inputPath) console.log(`   Input: ${overrides.inputPath}`);
+      if (overrides.outputPath) console.log(`   Output: ${overrides.outputPath}`);
+      if (overrides.outputFileName) console.log(`   Output file: ${overrides.outputFileName}`);
+      if (overrides.outputType) console.log(`   Output type: ${overrides.outputType}`);
+    }
 
     // 获取事件总线用于监听事件
     const eventBus = class2css.getEventBus();

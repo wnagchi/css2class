@@ -295,6 +295,70 @@ class ConfigManager {
       unitConversion: this.getUnitConversion(),
     };
   }
+
+  // 运行时覆盖配置
+  overrideConfig(overrides) {
+    if (!overrides || typeof overrides !== 'object') {
+      return;
+    }
+
+    // 确保 config 对象存在
+    if (!this.config) {
+      this.config = {};
+    }
+
+    // 覆盖输入目录（multiFile.entry.path）
+    if (overrides.inputPath) {
+      if (!this.config.multiFile) {
+        this.config.multiFile = {};
+      }
+      if (!this.config.multiFile.entry) {
+        this.config.multiFile.entry = {};
+      }
+      this.config.multiFile.entry.path = overrides.inputPath;
+      this.eventBus.emit('config:override:inputPath', overrides.inputPath);
+    }
+
+    // 覆盖输出目录（multiFile.output.path）
+    if (overrides.outputPath) {
+      if (!this.config.multiFile) {
+        this.config.multiFile = {};
+      }
+      if (!this.config.multiFile.output) {
+        this.config.multiFile.output = {};
+      }
+      this.config.multiFile.output.path = overrides.outputPath;
+      this.eventBus.emit('config:override:outputPath', overrides.outputPath);
+    }
+
+    // 覆盖输出文件名（multiFile.output.fileName）
+    if (overrides.outputFileName) {
+      if (!this.config.multiFile) {
+        this.config.multiFile = {};
+      }
+      if (!this.config.multiFile.output) {
+        this.config.multiFile.output = {};
+      }
+      this.config.multiFile.output.fileName = overrides.outputFileName;
+      this.eventBus.emit('config:override:outputFileName', overrides.outputFileName);
+    }
+
+    // 覆盖输出类型（multiFile.output.cssOutType）
+    if (overrides.outputType) {
+      if (!this.config.multiFile) {
+        this.config.multiFile = {};
+      }
+      if (!this.config.multiFile.output) {
+        this.config.multiFile.output = {};
+      }
+      this.config.multiFile.output.cssOutType = overrides.outputType;
+      this.eventBus.emit('config:override:outputType', overrides.outputType);
+    }
+
+    // 重新更新配置引用
+    this.updateConfigReferences();
+    this.eventBus.emit('config:overridden', overrides);
+  }
 }
 
 module.exports = ConfigManager;
