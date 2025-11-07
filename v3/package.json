@@ -1,0 +1,65 @@
+{
+  "name": "class2css",
+  "version": "1.0.0",
+  "description": "Dynamic CSS Generator for WeChat Mini Program",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "class2css": "./dist/bin/class2css.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "dev": "nodemon",
+    "dev:ts": "ts-node run.ts",
+    "start": "node dist/class2css.js",
+    "start:no-watch": "node dist/class2css.js --no-watch",
+    "start:dev": "ts-node bin/class2css.ts",
+    "start:ts": "node dist/class2css.js",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
+    "test": "ts-node run.ts",
+    "test:js": "node run.js",
+    "help": "node dist/class2css.js --help",
+    "version": "node dist/class2css.js --version",
+    "lint": "eslint src/**/*.ts bin/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts bin/**/*.ts --fix",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "css",
+    "wechat",
+    "miniprogram",
+    "tailwind",
+    "utility",
+    "generator"
+  ],
+  "author": "CMViking",
+  "license": "MIT",
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "tslib": "^2.8.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cmviking/class2css.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cmviking/class2css/issues"
+  },
+  "homepage": "https://github.com/cmviking/class2css#readme",
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "eslint": "8.57.1",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-prettier": "5.5.4",
+    "nodemon": "^3.1.10",
+    "prettier": "3.6.2",
+    "rimraf": "^6.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

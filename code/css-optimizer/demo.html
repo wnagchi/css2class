@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS优化器演示页面</title>
+  <link rel="stylesheet" href="test-output.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .demo-section {
+      background: white;
+      margin: 20px 0;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .demo-title {
+      color: #333;
+      border-bottom: 2px solid #1890ff;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    .color-demo {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .color-box {
+      padding: 20px;
+      border-radius: 6px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+    }
+    .spacing-demo {
+      background-color: #f0f0f0;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .spacing-item {
+      background-color: #1890ff;
+      color: white;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .layout-demo {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #f8f9fa;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 6px;
+    }
+    .layout-item {
+      background-color: #52c41a;
+      color: white;
+      padding: 15px;
+      border-radius: 4px;
+      text-align: center;
+      flex: 1;
+      margin: 0 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold text-primary mb-8 text-center">
+      CSS优化器功能演示
+    </h1>
+
+    <!-- 颜色演示 -->
+    <div class="demo-section">
+      <h2 class="demo-title">🎨 颜色解析演示</h2>
+      <div class="color-demo">
+        <div class="bg-primary color-box">主色调 (bg-primary)</div>
+        <div class="bg-success color-box">成功色 (bg-success)</div>
+        <div class="bg-warning color-box">警告色 (bg-warning)</div>
+        <div class="bg-error color-box">错误色 (bg-error)</div>
+        <div class="bg-headerblue color-box">自定义蓝色 (bg-headerblue)</div>
+        <div class="bg-333333 color-box">十六进制 #333333</div>
+      </div>
+      
+      <h3 class="text-lg font-semibold mb-4">文字颜色演示</h3>
+      <div class="p-6 bg-gray-100 rounded-lg">
+        <p class="text-primary mb-2">主色调文字 (text-primary)</p>
+        <p class="text-ff0000 mb-2">红色文字 (text-ff0000)</p>
+        <p class="text-123456 mb-2">蓝色文字 (text-123456)</p>
+        <p class="text-ffffff bg-333333 p-2 rounded">白色文字 (text-ffffff)</p>
+      </div>
+    </div>
+
+    <!-- 间距演示 -->
+    <div class="demo-section">
+      <h2 class="demo-title">📏 间距转换演示</h2>
+      <div class="spacing-demo">
+        <div class="p-1 mb-2">内边距 p-1 (4px)</div>
+        <div class="p-2 mb-2">内边距 p-2 (8px)</div>
+        <div class="p-3 mb-2">内边距 p-3 (12px)</div>
+        <div class="p-4 mb-2">内边距 p-4 (16px)</div>
+        <div class="p-6 mb-2">内边距 p-6 (24px)</div>
+        <div class="p-8 mb-2">内边距 p-8 (32px)</div>
+      </div>
+      
+      <h3 class="text-lg font-semibold mb-4">外边距演示</h3>
+      <div class="bg-gray-100 p-4 rounded">
+        <div class="mb-1 p-2 bg-blue-200 rounded">外边距 mb-1 (4px)</div>
+        <div class="mb-2 p-2 bg-blue-300 rounded">外边距 mb-2 (8px)</div>
+        <div class="mb-4 p-2 bg-blue-400 rounded">外边距 mb-4 (16px)</div>
+        <div class="mb-6 p-2 bg-blue-500 rounded">外边距 mb-6 (24px)</div>
+        <div class="mb-8 p-2 bg-blue-600 rounded">外边距 mb-8 (32px)</div>
+      </div>
+    </div>
+
+    <!-- 布局演示 -->
+    <div class="demo-section">
+      <h2 class="demo-title">🎯 布局样式演示</h2>
+      
+      <h3 class="text-lg font-semibold mb-4">Flex布局</h3>
+      <div class="layout-demo">
+        <div class="layout-item">项目1</div>
+        <div class="layout-item">项目2</div>
+        <div class="layout-item">项目3</div>
+      </div>
+      
+      <h3 class="text-lg font-semibold mb-4">Grid布局</h3>
+      <div class="grid gap-4 p-4 bg-gray-100 rounded">
+        <div class="bg-primary p-4 rounded text-white text-center">网格项目1</div>
+        <div class="bg-success p-4 rounded text-white text-center">网格项目2</div>
+        <div class="bg-warning p-4 rounded text-white text-center">网格项目3</div>
+        <div class="bg-error p-4 rounded text-white text-center">网格项目4</div>
+        <div class="bg-headerblue p-4 rounded text-white text-center">网格项目5</div>
+        <div class="bg-333333 p-4 rounded text-white text-center">网格项目6</div>
+      </div>
+    </div>
+
+    <!-- 响应式演示 -->
+    <div class="demo-section">
+      <h2 class="demo-title">📱 响应式设计演示</h2>
+      <div class="bg-gray-100 p-4 rounded">
+        <p class="mb-4">调整浏览器窗口大小查看响应式效果：</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="bg-primary p-4 rounded text-white text-center">响应式项目1</div>
+          <div class="bg-success p-4 rounded text-white text-center">响应式项目2</div>
+          <div class="bg-warning p-4 rounded text-white text-center">响应式项目3</div>
+          <div class="bg-error p-4 rounded text-white text-center">响应式项目4</div>
+          <div class="bg-headerblue p-4 rounded text-white text-center">响应式项目5</div>
+          <div class="bg-333333 p-4 rounded text-white text-center">响应式项目6</div>
+        </div>
+        <div class="mt-4 p-4 bg-white rounded border-333">
+          <p class="text-primary">这个元素在不同屏幕尺寸下会有不同的外边距 (md:mb-0)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 功能统计 -->
+    <div class="demo-section">
+      <h2 class="demo-title">📊 CSS优化器功能统计</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-green-50 p-4 rounded border border-green-200">
+          <h3 class="text-green-800 font-semibold mb-2">✅ 已实现功能</h3>
+          <ul class="text-green-700 text-sm space-y-1">
+            <li>• 命名颜色解析 (primary, success, warning, error)</li>
+            <li>• 自定义颜色配置 (headerblue)</li>
+            <li>• 十六进制颜色解析 (#333333, #ff0000, #00ff00)</li>
+            <li>• 间距转换 (p-1 到 p-8, mb-1 到 mb-8)</li>
+            <li>• 布局样式 (flex, grid, block, container)</li>
+            <li>• 响应式设计 (md: breakpoint)</li>
+            <li>• 多格式支持 (.vue, .wxml, .html)</li>
+            <li>• 增量CSS生成</li>
+          </ul>
+        </div>
+        
+        <div class="bg-blue-50 p-4 rounded border border-blue-200">
+          <h3 class="text-blue-800 font-semibold mb-2">📈 性能数据</h3>
+          <ul class="text-blue-700 text-sm space-y-1">
+            <li>• 处理文件: 2个示例文件</li>
+            <li>• 识别类名: 180+ 个</li>
+            <li>• 成功生成: 54个CSS规则</li>
+            <li>• 匹配率: ~60-70%</li>
+            <li>• 支持格式: Vue, WXML, HTML</li>
+            <li>• 单位转换: px, rpx (可配置)</li>
+            <li>• 响应式断点: sm, md, lg, xl</li>
+            <li>• 颜色配置: 自定义映射</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 使用说明 -->
+    <div class="demo-section">
+      <h2 class="demo-title">🚀 使用说明</h2>
+      <div class="bg-gray-50 p-4 rounded">
+        <h3 class="font-semibold mb-2">基本用法</h3>
+        <pre class="bg-gray-800 text-green-400 p-3 rounded text-sm overflow-x-auto">
+# 处理单个文件
+node test.js examples/comprehensive-example.vue
+
+# 处理目录并输出到文件
+node test.js examples/ output.css
+
+# 测试十六进制颜色
+node test.js test-hex-colors.html hex-test.css
+        </pre>
+        
+        <h3 class="font-semibold mb-2 mt-4">支持的类名模式</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <h4 class="font-medium text-primary mb-1">颜色类</h4>
+            <ul class="space-y-1 text-gray-600">
+              <li>• bg-primary, text-success</li>
+              <li>• bg-333333, text-ff0000</li>
+              <li>• border-333</li>
+            </ul>
+          </div>
+          <div>
+            <h4 class="font-medium text-primary mb-1">间距类</h4>
+            <ul class="space-y-1 text-gray-600">
+              <li>• p-1 到 p-8 (padding)</li>
+              <li>• mb-1 到 mb-8 (margin-bottom)</li>
+              <li>• mt-4, mr-3 (其他方向)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

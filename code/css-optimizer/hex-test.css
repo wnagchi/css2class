@@ -1,0 +1,17 @@
+.container { max-width: 1200px; margin: 0 auto; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.p-4 { padding: 4px; }
+.text-primary { color: #1890ff; }
+.mb-4 { margin-bottom: 4px; }
+.bg-333333 { background-color: #333333; }
+.p-6 { padding: 6px; }
+.text-ff0000 { color: #ff0000; }
+.mb-2 { margin-bottom: 2px; }
+.bg-00ff00 { background-color: #00ff00; }
+.text-ffffff { color: #ffffff; }
+.px-4 { undefined: 4px; }
+.py-2 { undefined: 2px; }
+.border-333 { border-color: #333; }
+.p-3 { padding: 3px; }
+.mt-4 { margin-top: 4px; }
+.text-123456 { color: #123456; }

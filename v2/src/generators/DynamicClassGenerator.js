@@ -5,10 +5,10 @@ class DynamicClassGenerator {
     this.eventBus = eventBus;
     this.configManager = configManager;
     this.importantParser = importantParser;
-    
+
     // 初始化单位处理器
     this.unitProcessor = new UnitProcessor(this.configManager.getConfig());
-    
+
     // CSS生成缓存
     this.cssCache = new Map();
     this.cacheEnabled = true;
@@ -24,96 +24,96 @@ class DynamicClassGenerator {
     const unitConversion = this.configManager.getUnitConversion();
     const cssNameMap = this.configManager.getCssNameMap();
     let cssStr = '';
-    let userBaseClassArr = [];
-    
+    const userBaseClassArr = [];
+
     this.eventBus.emit('generator:dynamic:started', { classCount: classArr.length });
-    
+
     classArr.forEach((className, index) => {
       try {
         const isImportant = this.importantParser.hasImportantFlag(className);
         const cleanClassName = this.importantParser.cleanImportantFlag(className);
-        let name = this.parseClassNameIntelligent(cleanClassName);
-        
+        const name = this.parseClassNameIntelligent(cleanClassName);
+
         if (!name) {
-          this.eventBus.emit('generator:dynamic:skipped', { 
-            className, 
-            reason: 'invalid_format' 
+          this.eventBus.emit('generator:dynamic:skipped', {
+            className,
+            reason: 'invalid_format',
           });
           return;
         }
-        
+
         if (cssNameMap.has(name[0])) {
           const classCss = this.getClassListStr([name[0], name[1]], className, isImportant);
           cssStr += classCss;
-          this.eventBus.emit('generator:dynamic:generated', { 
-            className, 
+          this.eventBus.emit('generator:dynamic:generated', {
+            className,
             cleanName: cleanClassName,
-            isImportant 
+            isImportant,
           });
         } else {
           userBaseClassArr.push([name[0], name[1], className, isImportant]);
-          this.eventBus.emit('generator:dynamic:userBase', { 
-            className, 
+          this.eventBus.emit('generator:dynamic:userBase', {
+            className,
             cleanName: cleanClassName,
-            isImportant 
+            isImportant,
           });
         }
       } catch (error) {
-        this.eventBus.emit('generator:dynamic:error', { 
-          className, 
-          error: error.message 
+        this.eventBus.emit('generator:dynamic:error', {
+          className,
+          error: error.message,
         });
       }
     });
-    
+
     this.eventBus.emit('generator:dynamic:completed', {
       generatedCount: classArr.length - userBaseClassArr.length,
       userBaseCount: userBaseClassArr.length,
-      cssLength: cssStr.length
+      cssLength: cssStr.length,
     });
-    
+
     return { cssStr, userBaseClassArr };
   }
 
   // 智能前缀解析方法 - 支持复合前缀如 max-w, min-h 等
   parseClassNameIntelligent(className) {
     const cssNameMap = this.configManager.getCssNameMap();
-    
+
     // 获取所有已知前缀，按长度降序排列
     const prefixes = Array.from(cssNameMap.keys()).sort((a, b) => b.length - a.length);
-    
+
     // 尝试匹配每个前缀
     for (const prefix of prefixes) {
       if (className.startsWith(prefix + '-')) {
         const value = className.substring(prefix.length + 1);
         // 确保值部分不为空且不包含连字符
         if (value && !value.includes('-')) {
-          this.eventBus.emit('generator:dynamic:prefix_matched', { 
-            className, 
-            prefix, 
+          this.eventBus.emit('generator:dynamic:prefix_matched', {
+            className,
+            prefix,
             value,
-            method: 'intelligent_parsing'
+            method: 'intelligent_parsing',
           });
           return [prefix, value];
         }
       }
     }
-    
+
     // 降级到原有逻辑
     const parts = className.split('-');
     if (parts.length === 2) {
-      this.eventBus.emit('generator:dynamic:prefix_matched', { 
-        className, 
-        prefix: parts[0], 
+      this.eventBus.emit('generator:dynamic:prefix_matched', {
+        className,
+        prefix: parts[0],
         value: parts[1],
-        method: 'fallback_split'
+        method: 'fallback_split',
       });
       return parts;
     }
-    
-    this.eventBus.emit('generator:dynamic:parse_failed', { 
-      className, 
-      reason: 'invalid_format' 
+
+    this.eventBus.emit('generator:dynamic:parse_failed', {
+      className,
+      reason: 'invalid_format',
     });
     return null;
   }
@@ -128,66 +128,76 @@ class DynamicClassGenerator {
     }
 
     const classNameDefinition = this.configManager.getCssNameMap().get(name[0]);
-    
+
     if (!classNameDefinition) {
-      this.eventBus.emit('generator:error', { 
-        error: `CSS name definition not found for: ${name[0]}` 
+      this.eventBus.emit('generator:error', {
+        error: `CSS name definition not found for: ${name[0]}`,
       });
       return '';
     }
-    
+
     let cssResult = '';
-    
+
     // 处理对象类型的CSS定义
     if (this.isObject(classNameDefinition)) {
-      cssResult = this.generateObjectBasedCSS(name, originalClassName, classNameDefinition, isImportant);
+      cssResult = this.generateObjectBasedCSS(
+        name,
+        originalClassName,
+        classNameDefinition,
+        isImportant
+      );
     } else {
       // 处理字符串类型的CSS定义
-      cssResult = this.generateStringBasedCSS(name, originalClassName, classNameDefinition, isImportant);
+      cssResult = this.generateStringBasedCSS(
+        name,
+        originalClassName,
+        classNameDefinition,
+        isImportant
+      );
     }
-    
+
     // 缓存结果
     if (this.cacheEnabled && cssResult) {
       this.cssCache.set(cacheKey, cssResult);
     }
-    
+
     return cssResult;
   }
 
   // 生成基于对象定义的CSS
   generateObjectBasedCSS(name, originalClassName, classNameDefinition, isImportant) {
     if (!classNameDefinition.classArr) {
-      this.eventBus.emit('generator:warning', { 
-        warning: `classArr not found in definition for: ${name[0]}` 
+      this.eventBus.emit('generator:warning', {
+        warning: `classArr not found in definition for: ${name[0]}`,
       });
       return '';
     }
 
     const rawValue = name[1];
-    let processedValues = [];
-    
+    const processedValues = [];
+
     // 为每个CSS属性处理值
     classNameDefinition.classArr.forEach((cssProperty) => {
       // 使用单位处理器智能处理值
       let processedValue;
-      
+
       if (this.unitProcessor && !classNameDefinition.skipConversion) {
         processedValue = this.unitProcessor.parseValue(
-          rawValue, 
-          cssProperty, 
+          rawValue,
+          cssProperty,
           classNameDefinition.unit
         );
       } else {
         // 使用传统逻辑（支持skipConversion）
         processedValue = this.legacyProcessValue(rawValue, classNameDefinition);
       }
-      
+
       processedValues.push({
         property: cssProperty,
-        value: processedValue
+        value: processedValue,
       });
     });
-    
+
     // 生成CSS字符串
     let str = `\n.${originalClassName} {\n`;
     processedValues.forEach(({ property, value }) => {
@@ -195,7 +205,7 @@ class DynamicClassGenerator {
       str += `  ${property}: ${finalValue};\n`;
     });
     str += `}\n`;
-    
+
     return str;
   }
 
@@ -203,7 +213,7 @@ class DynamicClassGenerator {
   generateStringBasedCSS(name, originalClassName, classNameDefinition, isImportant) {
     const rawValue = name[1];
     let processedValue;
-    
+
     if (this.unitProcessor) {
       // 使用单位处理器处理值
       processedValue = this.unitProcessor.parseValue(rawValue, classNameDefinition);
@@ -211,9 +221,9 @@ class DynamicClassGenerator {
       // 回退到原有逻辑
       processedValue = this.legacyProcessValue(rawValue);
     }
-    
+
     const finalValue = isImportant ? `${processedValue} !important` : processedValue;
-    
+
     return `\n.${originalClassName} {\n  ${classNameDefinition}: ${finalValue};\n}\n`;
   }
 
@@ -221,11 +231,11 @@ class DynamicClassGenerator {
   legacyProcessValue(rawValue, classNameDefinition = {}) {
     const unitConversion = this.configManager.getUnitConversion();
     const baseUnit = this.configManager.getBaseUnit();
-    
+
     let unit = baseUnit;
     let size = rawValue;
-    let sizeArr = size.split('');
-    
+    const sizeArr = size.split('');
+
     // 单位处理
     if (classNameDefinition.unit === '-') {
       unit = '';
@@ -242,12 +252,12 @@ class DynamicClassGenerator {
     } else {
       size = unitConversion * size;
     }
-    
+
     // 处理小数点
     if (rawValue[0] === '0' && rawValue.length > 1) {
       size = String(size).replace('0', '0.');
     }
-    
+
     // 当值为0时，省略单位
     return size === 0 || size === '0' ? '0' : `${size}${unit}`;
   }
@@ -262,60 +272,62 @@ class DynamicClassGenerator {
     let str = '';
     const userBaseClass = this.configManager.getUserBaseClass();
     const cssWrite = new Set(); // 临时防重复集合
-    
+
     this.eventBus.emit('generator:userBase:started', { classCount: arr.length });
-    
+
     arr.forEach((item, index) => {
       try {
         const [className, value, originalClassName, isImportant] = item;
         const classKey = originalClassName;
-        
+
         if (cssWrite.has(classKey)) {
-          this.eventBus.emit('generator:userBase:skipped', { 
-            className: originalClassName, 
-            reason: 'duplicate' 
+          this.eventBus.emit('generator:userBase:skipped', {
+            className: originalClassName,
+            reason: 'duplicate',
           });
           return;
         }
-        
+
         const baseClassItem = userBaseClass.find(([k, v]) => k === className);
-        
+
         if (baseClassItem === undefined) {
-          this.eventBus.emit('generator:userBase:skipped', { 
-            className: originalClassName, 
-            reason: 'not_found_in_config' 
+          this.eventBus.emit('generator:userBase:skipped', {
+            className: originalClassName,
+            reason: 'not_found_in_config',
           });
           return;
         }
-        
+
         cssWrite.add(classKey);
-        let cssClassName = className.replaceAll('_', '-');
-        
+        const cssClassName = className.replaceAll('_', '-');
+
         if (this.isArray(baseClassItem[1])) {
           const cssValue = isImportant ? `${value} !important` : value;
           str += `\n.${originalClassName} {\n  ${cssClassName}: ${cssValue}\n}\n`;
         } else if (this.isObject(baseClassItem[1]) && baseClassItem[1][value] !== undefined) {
-          const cssValue = isImportant ? `${baseClassItem[1][value]} !important` : baseClassItem[1][value];
-          str += `\n.${originalClassName} {\n  ${(baseClassItem[1]['ABBR'] || cssClassName)}: ${cssValue}\n}\n`;
+          const cssValue = isImportant
+            ? `${baseClassItem[1][value]} !important`
+            : baseClassItem[1][value];
+          str += `\n.${originalClassName} {\n  ${baseClassItem[1]['ABBR'] || cssClassName}: ${cssValue}\n}\n`;
         }
-        
-        this.eventBus.emit('generator:userBase:generated', { 
+
+        this.eventBus.emit('generator:userBase:generated', {
           className: originalClassName,
-          isImportant 
+          isImportant,
         });
       } catch (error) {
-        this.eventBus.emit('generator:userBase:error', { 
-          item, 
-          error: error.message 
+        this.eventBus.emit('generator:userBase:error', {
+          item,
+          error: error.message,
         });
       }
     });
-    
+
     this.eventBus.emit('generator:userBase:completed', {
       generatedCount: cssWrite.size,
-      cssLength: str.length
+      cssLength: str.length,
     });
-    
+
     return str;
   }
 
@@ -332,59 +344,53 @@ class DynamicClassGenerator {
   validateGeneratedCSS(cssStr) {
     const errors = [];
     const warnings = [];
-    
+
     if (!cssStr || typeof cssStr !== 'string') {
       errors.push('Generated CSS is null or not a string');
       return { errors, warnings, isValid: false };
     }
-    
+
     // 检查基本的CSS语法
-    const cssRules = cssStr.split('}').filter(rule => rule.trim().length > 0);
-    
+    const cssRules = cssStr.split('}').filter((rule) => rule.trim().length > 0);
+
     cssRules.forEach((rule, index) => {
       if (!rule.includes('{')) {
         errors.push(`Rule ${index + 1} missing opening brace`);
       }
-      
+
       if (!rule.includes(':')) {
         warnings.push(`Rule ${index + 1} might be missing property-value pairs`);
       }
     });
-    
+
     // 检查重复的选择器
     const selectors = cssStr.match(/\.([\w\-]+)\s*{/g);
     if (selectors) {
-      const selectorNames = selectors.map(s => s.replace(/[.{]/g, '').trim());
-      const duplicates = selectorNames.filter((name, index) => selectorNames.indexOf(name) !== index);
-      
+      const selectorNames = selectors.map((s) => s.replace(/[.{]/g, '').trim());
+      const duplicates = selectorNames.filter(
+        (name, index) => selectorNames.indexOf(name) !== index
+      );
+
       if (duplicates.length > 0) {
         warnings.push(`Duplicate selectors found: ${duplicates.join(', ')}`);
       }
     }
-    
+
     return { errors, warnings, isValid: errors.length === 0 };
   }
 
   // 获取生成统计
-  getGenerationStats() {
-    return {
-      configManagerReady: !!this.configManager,
-      importantParserReady: !!this.importantParser,
-      cssNameMapSize: this.configManager.getCssNameMap().size,
-      userBaseClassCount: this.configManager.getUserBaseClass().length
-    };
-  }
 
   // 调试生成过程
   debugGeneration(classArr) {
     const result = this.getClassList(classArr);
     const validation = this.validateGeneratedCSS(result.cssStr);
-    
+
     return {
       inputClasses: classArr,
       result,
       validation,
-      stats: this.getGenerationStats()
+      stats: this.getGenerationStats(),
     };
   }
 
@@ -392,7 +398,7 @@ class DynamicClassGenerator {
   clearCache() {
     this.cssCache.clear();
     this.eventBus.emit('generator:cache:cleared', {
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -403,7 +409,7 @@ class DynamicClassGenerator {
     }
     this.eventBus.emit('generator:cache:toggle', {
       enabled,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -411,7 +417,7 @@ class DynamicClassGenerator {
     return {
       size: this.cssCache.size,
       enabled: this.cacheEnabled,
-      memoryUsage: this.estimateCacheMemoryUsage()
+      memoryUsage: this.estimateCacheMemoryUsage(),
     };
   }
 
@@ -427,16 +433,16 @@ class DynamicClassGenerator {
   updateConfig(newConfigManager) {
     if (newConfigManager && newConfigManager !== this.configManager) {
       this.configManager = newConfigManager;
-      
+
       // 重新初始化单位处理器
       this.unitProcessor = new UnitProcessor(this.configManager.getConfig());
-      
+
       // 清空缓存，因为配置可能已更改
       this.clearCache();
-      
+
       this.eventBus.emit('generator:config:updated', {
         timestamp: Date.now(),
-        hasUnitProcessor: !!this.unitProcessor
+        hasUnitProcessor: !!this.unitProcessor,
       });
     }
   }
@@ -445,13 +451,13 @@ class DynamicClassGenerator {
   analyzePerformance(classArr) {
     const startTime = process.hrtime.bigint();
     const initialCacheSize = this.cssCache.size;
-    
+
     const result = this.getClassList(classArr);
-    
+
     const endTime = process.hrtime.bigint();
     const duration = Number(endTime - startTime) / 1000000; // 转换为毫秒
     const finalCacheSize = this.cssCache.size;
-    
+
     return {
       result,
       performance: {
@@ -459,8 +465,8 @@ class DynamicClassGenerator {
         classesPerMs: classArr.length / duration,
         cacheHits: finalCacheSize - initialCacheSize,
         cacheHitRate: initialCacheSize > 0 ? (initialCacheSize / classArr.length) * 100 : 0,
-        generatedCssLength: result.cssStr.length
-      }
+        generatedCssLength: result.cssStr.length,
+      },
     };
   }
 
@@ -468,35 +474,35 @@ class DynamicClassGenerator {
   batchGenerateCSS(classBatches) {
     const results = [];
     let totalDuration = 0;
-    
+
     this.eventBus.emit('generator:batch:started', {
-      batchCount: classBatches.length
+      batchCount: classBatches.length,
     });
-    
+
     classBatches.forEach((batch, index) => {
       const startTime = process.hrtime.bigint();
       const batchResult = this.getClassList(batch);
       const endTime = process.hrtime.bigint();
-      
+
       const duration = Number(endTime - startTime) / 1000000;
       totalDuration += duration;
-      
+
       results.push({
         batchIndex: index,
         classCount: batch.length,
         cssLength: batchResult.cssStr.length,
         duration,
-        result: batchResult
+        result: batchResult,
       });
     });
-    
+
     this.eventBus.emit('generator:batch:completed', {
       batchCount: classBatches.length,
       totalDuration,
       averageDuration: totalDuration / classBatches.length,
-      results
+      results,
     });
-    
+
     return results;
   }
 
@@ -504,34 +510,34 @@ class DynamicClassGenerator {
   getOptimizationSuggestions() {
     const suggestions = [];
     const cacheStats = this.getCacheStats();
-    
+
     // 缓存相关建议
     if (!this.cacheEnabled) {
       suggestions.push({
         type: 'cache',
         priority: 'high',
         message: 'Enable CSS generation cache for better performance',
-        action: 'setCacheEnabled(true)'
+        action: 'setCacheEnabled(true)',
       });
     } else if (cacheStats.size > 1000) {
       suggestions.push({
         type: 'cache',
         priority: 'medium',
         message: 'Cache size is large, consider clearing periodically',
-        action: 'clearCache()'
+        action: 'clearCache()',
       });
     }
-    
+
     // 单位处理器建议
     if (!this.unitProcessor) {
       suggestions.push({
         type: 'unit_processor',
         priority: 'medium',
         message: 'Unit processor not available, using legacy processing',
-        action: 'Check configuration manager setup'
+        action: 'Check configuration manager setup',
       });
     }
-    
+
     return suggestions;
   }
 
@@ -542,7 +548,7 @@ class DynamicClassGenerator {
       importantParserReady: !!this.importantParser,
       cssNameMapSize: this.configManager ? this.configManager.getCssNameMap().size : 0,
       userBaseClassCount: this.configManager ? this.configManager.getUserBaseClass().length : 0,
-      unitProcessorReady: !!this.unitProcessor
+      unitProcessorReady: !!this.unitProcessor,
     };
 
     // 添加缓存统计
@@ -554,7 +560,7 @@ class DynamicClassGenerator {
       baseStats.unitProcessor = {
         baseUnit: unitConfig.baseUnit,
         unitConversion: unitConfig.unitConversion,
-        supportedProperties: Object.keys(unitConfig.propertyUnits).length
+        supportedProperties: Object.keys(unitConfig.propertyUnits).length,
       };
     }
 
@@ -562,4 +568,4 @@ class DynamicClassGenerator {
   }
 }
 
-module.exports = DynamicClassGenerator; 
+module.exports = DynamicClassGenerator;

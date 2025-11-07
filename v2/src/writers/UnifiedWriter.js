@@ -23,7 +23,7 @@ class UnifiedWriter {
     this.eventBus.emit('unifiedWriter:debounced', {
       triggerFile,
       pendingCount: this.pendingWrites.size,
-      delay: this.debounceDelay
+      delay: this.debounceDelay,
     });
 
     // 设置新的定时器
@@ -33,7 +33,7 @@ class UnifiedWriter {
       } catch (error) {
         this.eventBus.emit('unifiedWriter:error', {
           error: error.message,
-          pendingWrites: Array.from(this.pendingWrites)
+          pendingWrites: Array.from(this.pendingWrites),
         });
       } finally {
         this.pendingWrites.clear();
@@ -45,31 +45,31 @@ class UnifiedWriter {
   // 执行实际的写入操作
   async executeWrite(fullScanManager, fileWriter) {
     this.eventBus.emit('unifiedWriter:started', {
-      pendingFiles: Array.from(this.pendingWrites)
+      pendingFiles: Array.from(this.pendingWrites),
     });
 
     // 等待全量数据锁定
     const isLocked = await fullScanManager.waitForDataLock();
-    
+
     if (!isLocked) {
       this.eventBus.emit('unifiedWriter:warning', {
-        message: 'Full scan data not locked, using available data'
+        message: 'Full scan data not locked, using available data',
       });
     }
 
     // 获取合并后的完整数据
     const mergedData = fullScanManager.getMergedData();
-    
+
     this.eventBus.emit('unifiedWriter:dataReady', {
       classCount: mergedData.classListSet.size,
       staticClassCount: mergedData.userStaticClassListSet.size,
       fileCount: mergedData.fileCount,
-      isLocked: mergedData.isLocked
+      isLocked: mergedData.isLocked,
     });
 
     // 生成统一CSS内容
     const cssContent = await this.generateUnifiedCSS(
-      mergedData.classListSet, 
+      mergedData.classListSet,
       mergedData.userStaticClassListSet
     );
 
@@ -82,14 +82,14 @@ class UnifiedWriter {
     await fileWriter.writeCSS(cssContent, dummyFilePath, {
       forceUniFile: true,
       outputPath: outputConfig.path,
-      fileName: outputConfig.fileName
+      fileName: outputConfig.fileName,
     });
 
     this.eventBus.emit('unifiedWriter:completed', {
       cssLength: cssContent.length,
       classCount: mergedData.classListSet.size,
       staticClassCount: mergedData.userStaticClassListSet.size,
-      processedFiles: Array.from(this.pendingWrites)
+      processedFiles: Array.from(this.pendingWrites),
     });
   }
 
@@ -98,7 +98,7 @@ class UnifiedWriter {
     try {
       this.eventBus.emit('unifiedWriter:cssGeneration:started', {
         classCount: classListSet.size,
-        staticClassCount: userStaticClassListSet.size
+        staticClassCount: userStaticClassListSet.size,
       });
 
       // 清空防重复写入缓存（类似原始代码中的 cssWrite.clear()）
@@ -106,32 +106,31 @@ class UnifiedWriter {
 
       // 生成动态CSS
       const dynamicResult = this.dynamicClassGenerator.getClassList(Array.from(classListSet));
-      
+
       // 生成用户基础类CSS
-      const userBaseResult = this.dynamicClassGenerator.createUserBaseClassList(dynamicResult.userBaseClassArr);
-      
+      const userBaseResult = this.dynamicClassGenerator.createUserBaseClassList(
+        dynamicResult.userBaseClassArr
+      );
+
       // 生成静态类CSS
       const staticResult = await this.generateStaticCSS(Array.from(userStaticClassListSet));
 
       // 合并所有CSS内容
-      const cssContent = [
-        dynamicResult.cssStr,
-        staticResult,
-        userBaseResult
-      ].filter(Boolean).join('\n');
+      const cssContent = [dynamicResult.cssStr, staticResult, userBaseResult]
+        .filter(Boolean)
+        .join('\n');
 
       this.eventBus.emit('unifiedWriter:cssGeneration:completed', {
         dynamicCssLength: dynamicResult.cssStr.length,
         staticCssLength: staticResult.length,
         userBaseCssLength: userBaseResult.length,
-        totalCssLength: cssContent.length
+        totalCssLength: cssContent.length,
       });
 
       return cssContent;
-
     } catch (error) {
       this.eventBus.emit('unifiedWriter:cssGeneration:error', {
-        error: error.message
+        error: error.message,
       });
       throw error;
     }
@@ -149,7 +148,7 @@ class UnifiedWriter {
       let str = '';
 
       this.eventBus.emit('unifiedWriter:staticGeneration:started', {
-        classCount: userStaticClassArr.length
+        classCount: userStaticClassArr.length,
       });
 
       userStaticClassArr.forEach((className) => {
@@ -158,7 +157,7 @@ class UnifiedWriter {
         }
 
         const staticClassItem = userStaticClass.find(([k, v]) => k === className);
-        
+
         if (staticClassItem !== undefined) {
           cssWrite.add(className);
           const cssClassName = className.replaceAll('_', '-');
@@ -168,14 +167,13 @@ class UnifiedWriter {
 
       this.eventBus.emit('unifiedWriter:staticGeneration:completed', {
         generatedCount: cssWrite.size,
-        cssLength: str.length
+        cssLength: str.length,
       });
 
       return str;
-
     } catch (error) {
       this.eventBus.emit('unifiedWriter:staticGeneration:error', {
-        error: error.message
+        error: error.message,
       });
       return '';
     }
@@ -194,12 +192,12 @@ class UnifiedWriter {
       clearTimeout(this.writeTimer);
       this.writeTimer = null;
     }
-    
+
     const cancelledCount = this.pendingWrites.size;
     this.pendingWrites.clear();
-    
+
     this.eventBus.emit('unifiedWriter:cancelled', {
-      cancelledCount
+      cancelledCount,
     });
   }
 
@@ -207,12 +205,12 @@ class UnifiedWriter {
   async immediateWrite(fullScanManager, fileWriter, triggerFile = null) {
     // 取消防抖定时器
     this.cancelPendingWrites();
-    
+
     // 立即执行写入
     if (triggerFile) {
       this.pendingWrites.add(triggerFile);
     }
-    
+
     await this.executeWrite(fullScanManager, fileWriter);
   }
 
@@ -222,7 +220,7 @@ class UnifiedWriter {
       isWritePending: this.writeTimer !== null,
       pendingWriteCount: this.pendingWrites.size,
       pendingFiles: Array.from(this.pendingWrites),
-      debounceDelay: this.debounceDelay
+      debounceDelay: this.debounceDelay,
     };
   }
 
@@ -230,7 +228,7 @@ class UnifiedWriter {
   setDebounceDelay(delay) {
     this.debounceDelay = Math.max(100, Math.min(5000, delay)); // 限制在100ms-5s之间
     this.eventBus.emit('unifiedWriter:debounceDelayChanged', {
-      newDelay: this.debounceDelay
+      newDelay: this.debounceDelay,
     });
   }
 
@@ -238,31 +236,31 @@ class UnifiedWriter {
   validateConfig() {
     const errors = [];
     const warnings = [];
-    
+
     const multiFile = this.configManager.getMultiFile();
     if (!multiFile) {
       errors.push('MultiFile configuration is required for unified writing');
       return { errors, warnings, isValid: false };
     }
-    
+
     const outputConfig = multiFile.output;
     if (!outputConfig) {
       errors.push('Output configuration is required');
       return { errors, warnings, isValid: false };
     }
-    
+
     if (outputConfig.cssOutType !== 'uniFile') {
       warnings.push(`CSS output type is '${outputConfig.cssOutType}', expected 'uniFile'`);
     }
-    
+
     if (!outputConfig.path) {
       errors.push('Output path is required for unified file writing');
     }
-    
+
     if (!outputConfig.fileName) {
       warnings.push('Output file name not specified, will use default');
     }
-    
+
     return { errors, warnings, isValid: errors.length === 0 };
   }
 
@@ -271,7 +269,7 @@ class UnifiedWriter {
     return {
       writeStats: this.getWriteStats(),
       configValidation: this.validateConfig(),
-      config: this.configManager.getMultiFile()?.output
+      config: this.configManager.getMultiFile()?.output,
     };
   }
 }

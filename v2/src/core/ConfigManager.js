@@ -11,7 +11,7 @@ class ConfigManager {
     this.userStaticClassSet = null;
     this.userBaseClass = null;
     this.userStaticClass = null;
-    
+
     this.loadConfig();
   }
 
@@ -20,14 +20,14 @@ class ConfigManager {
       // 解析绝对路径
       const path = require('path');
       const absoluteConfigPath = path.resolve(this.configPath);
-      
+
       // 清除require缓存以确保重新加载
       delete require.cache[require.resolve(absoluteConfigPath)];
       this.config = require(absoluteConfigPath);
-      
+
       this.updateConfigReferences();
       this.eventBus.emit('config:loaded', this.config);
-      
+
       return this.config;
     } catch (error) {
       this.eventBus.emit('config:error', error);
@@ -44,20 +44,18 @@ class ConfigManager {
     this.importantFlags = {
       prefix: this.config.importantFlags?.prefix || ['!'],
       suffix: this.config.importantFlags?.suffix || ['_i', '-i'],
-      custom: this.config.importantFlags?.custom || []
+      custom: this.config.importantFlags?.custom || [],
     };
 
     // 从atomicRules构建类名映射
     const cssNameMap = this.buildCssNameMapFromAtomicRules();
-    
+
     // 获取baseClassName配置
     const baseClassName = this.config.baseClassName || {};
 
     // 更新类名配置
-    this.userBaseClass = Object.entries(baseClassName)
-      .filter(([k, v]) => typeof v === 'object');
-    this.userStaticClass = Object.entries(baseClassName)
-      .filter(([k, v]) => typeof v === 'string');
+    this.userBaseClass = Object.entries(baseClassName).filter(([k, v]) => typeof v === 'object');
+    this.userStaticClass = Object.entries(baseClassName).filter(([k, v]) => typeof v === 'string');
 
     // 重建索引和缓存
     this.cssNameMap = cssNameMap;
@@ -73,13 +71,13 @@ class ConfigManager {
     const atomicRules = this.config.atomicRules || {};
 
     // 遍历所有规则类别
-    Object.values(atomicRules).forEach(category => {
+    Object.values(atomicRules).forEach((category) => {
       Object.entries(category).forEach(([className, rule]) => {
         // 转换新格式到旧格式以保持兼容
         const legacyFormat = {
           classArr: rule.properties || [],
           unit: rule.defaultUnit || '',
-          skipConversion: rule.skipConversion || false
+          skipConversion: rule.skipConversion || false,
         };
         cssNameMap.set(className, legacyFormat);
       });
@@ -200,9 +198,9 @@ class ConfigManager {
       baseUnit: this.baseUnit,
       multiFile: !!this.multiFile,
       compression: this.getCompression(),
-      unitConversion: this.getUnitConversion()
+      unitConversion: this.getUnitConversion(),
     };
   }
 }
 
-module.exports = ConfigManager; 
+module.exports = ConfigManager;

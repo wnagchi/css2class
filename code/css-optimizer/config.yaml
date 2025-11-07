@@ -1,0 +1,148 @@
+# CSS Optimizer 配置文件
+
+# 目标文件格式
+targetFormats:
+  - '.vue'
+  - '.wxml'
+  - '.html'
+  - '.jsx'
+  - '.tsx'
+
+# 颜色配置
+colors:
+  # 自定义颜色映射
+  customColors:
+    headerblue: '#007bff'
+    primary: '#1890ff'
+    success: '#52c41a'
+    warning: '#faad14'
+    error: '#ff4d4f'
+    text-primary: '#262626'
+    text-secondary: '#595959'
+    bg-light: '#fafafa'
+    bg-dark: '#141414'
+  
+  # 直接颜色值解析（十六进制、rgb、hsl等）
+  directColorParsing: true
+
+# 单位配置
+units:
+  spacing:
+    defaultUnit: 'px'
+    conversions:
+      px: 1
+      rpx: 2
+      rem: 16
+      em: 16
+      vw: 1
+      vh: 1
+  
+  fontSize:
+    defaultUnit: 'px'
+    conversions:
+      px: 1
+      rpx: 2
+      rem: 16
+  
+  width:
+    defaultUnit: 'px'
+    conversions:
+      px: 1
+      rpx: 2
+      rem: 16
+      vw: 1
+      vh: 1
+
+# 响应式断点
+breakpoints:
+  sm: '640px'
+  md: '768px'
+  lg: '1024px'
+  xl: '1280px'
+  '2xl': '1536px'
+
+# CSS规则配置
+rules:
+  # 间距规则
+  spacing:
+    margin: ['m', 'mt', 'mr', 'mb', 'ml', 'mx', 'my']
+    padding: ['p', 'pt', 'pr', 'pb', 'pl', 'px', 'py']
+    gap: ['gap', 'gap-x', 'gap-y']
+  
+  # 布局规则
+  layout:
+    display: ['block', 'inline', 'inline-block', 'flex', 'grid']
+    flex: ['flex', 'flex-row', 'flex-col', 'flex-wrap', 'flex-nowrap']
+    justify: ['justify-start', 'justify-center', 'justify-end', 'justify-between', 'justify-around']
+    align: ['items-start', 'items-center', 'items-end', 'items-stretch']
+    position: ['relative', 'absolute', 'fixed', 'sticky']
+  
+  # 颜色规则
+  colors:
+    background: ['bg']
+    text: ['text']
+    border: ['border', 'border-t', 'border-r', 'border-b', 'border-l']
+  
+  # 字体规则
+  fonts:
+    fontSize: ['text']
+    fontWeight: ['font']
+    fontFamily: ['font-family']
+  
+  # 交互规则
+  interactions:
+    hover: ['hover:']
+    focus: ['focus:']
+    active: ['active:']
+    disabled: ['disabled:']
+
+# 输出配置
+output:
+  # CSS文件输出方式
+  outputMode: 'separate' # 'separate' | 'inline'
+  
+  # CSS文件路径
+  cssFileName: 'styles.css'
+  
+  # 是否压缩CSS
+  minify: false
+  
+  # 是否生成Source Map
+  sourceMap: true
+  
+  # Base样式文件路径
+  baseStylesPath: './base.css'
+
+# 监听配置
+watch:
+  # 监听间隔（毫秒）
+  debounceMs: 300
+  
+  # 是否启用监听
+  enabled: true
+  
+  # 忽略的文件模式
+  ignorePatterns:
+    - 'node_modules/**'
+    - 'dist/**'
+    - 'build/**'
+    - '.git/**'
+    - '**/*.css'
+    - '**/*.js'
+    - '**/*.ts'
+
+# 性能配置
+performance:
+  # 缓存配置
+  cache:
+    enabled: true
+    maxSize: 1000
+    ttl: 300000 # 5分钟
+  
+  # 并行处理
+  parallel:
+    enabled: true
+    maxWorkers: 4
+  
+  # 内存限制
+  memoryLimit: '512MB'

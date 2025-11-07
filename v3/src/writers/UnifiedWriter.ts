@@ -1,0 +1,360 @@
+import { EventBus } from '../core/EventBus';
+import ConfigManager from '../core/ConfigManager';
+import DynamicClassGenerator from '../generators/DynamicClassGenerator';
+
+// 假设这些类型已经在其他地方定义
+interface FullScanManager {
+  getMergedData(): {
+    classListSet: Set<string>;
+    userStaticClassListSet: Set<string>;
+  };
+}
+
+interface FileWriter {
+  writeCSS(cssContent: string, filePath: string, options?: any): Promise<void>;
+}
+
+interface WriteStats {
+  totalWrites: number;
+  successfulWrites: number;
+  failedWrites: number;
+  lastWriteTime: Date | null;
+  averageWriteTime: number;
+}
+
+class UnifiedWriter {
+  private eventBus: EventBus;
+  private configManager: ConfigManager;
+  private dynamicClassGenerator: DynamicClassGenerator;
+  private writeTimer: NodeJS.Timeout | null = null;
+  private debounceDelay: number = 300;
+  private pendingWrites: Set<string> = new Set();
+  private stats: WriteStats = {
+    totalWrites: 0,
+    successfulWrites: 0,
+    failedWrites: 0,
+    lastWriteTime: null,
+    averageWriteTime: 0,
+  };
+  private writeTimes: number[] = [];
+
+  constructor(
+    eventBus: EventBus,
+    configManager: ConfigManager,
+    dynamicClassGenerator: DynamicClassGenerator
+  ) {
+    this.eventBus = eventBus;
+    this.configManager = configManager;
+    this.dynamicClassGenerator = dynamicClassGenerator;
+  }
+
+  // 防抖写入统一文件
+  debouncedWrite(
+    fullScanManager: FullScanManager,
+    fileWriter: FileWriter,
+    triggerFile: string | null = null
+  ): void {
+    // 清除现有的定时器
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer);
+    }
+
+    // 记录触发文件
+    if (triggerFile) {
+      this.pendingWrites.add(triggerFile);
+    }
+
+    this.eventBus.emit('unifiedWriter:debounced', {
+      triggerFile,
+      pendingCount: this.pendingWrites.size,
+      delay: this.debounceDelay,
+    });
+
+    // 设置新的定时器
+    this.writeTimer = setTimeout(async () => {
+      const startTime = Date.now();
+      try {
+        await this.executeWrite(fullScanManager, fileWriter);
+        const writeTime = Date.now() - startTime;
+        this.recordWriteSuccess(writeTime);
+      } catch (error) {
+        this.recordWriteFailure();
+        this.eventBus.emit('unifiedWriter:error', {
+          error: (error as Error).message,
+          pendingWrites: Array.from(this.pendingWrites),
+        });
+      } finally {
+        this.pendingWrites.clear();
+        this.writeTimer = null;
+      }
+    }, this.debounceDelay);
+  }
+
+  // 执行实际的写入操作
+  private async executeWrite(fullScanManager: FullScanManager, fileWriter: FileWriter): Promise<void> {
+    this.eventBus.emit('unifiedWriter:started', {
+      pendingFiles: Array.from(this.pendingWrites),
+    });
+
+    try {
+      // 获取合并后的数据
+      const mergedData = fullScanManager.getMergedData();
+      const { classListSet, userStaticClassListSet } = mergedData;
+
+      // 转换为数组
+      const classArray = Array.from(classListSet);
+      const staticClassArray = Array.from(userStaticClassListSet);
+
+      // 生成动态CSS
+      const dynamicResult = this.dynamicClassGenerator.getClassList(classArray);
+
+      // 生成静态CSS
+      const staticCss = this.generateStaticCSS(staticClassArray);
+
+      // 合并CSS
+      const finalCSS = this.mergeCSS(dynamicResult.cssStr, staticCss);
+
+      // 获取输出配置
+      const multiFile = this.configManager.getMultiFile();
+      if (!multiFile || !multiFile.output) {
+        throw new Error('Output configuration is required for unified writing');
+      }
+
+      const outputConfig = multiFile.output;
+      const outputPath = outputConfig.path || './';
+      const fileName = outputConfig.fileName || 'common.wxss';
+
+      // 写入文件
+      await fileWriter.writeCSS(finalCSS, '', {
+        forceUniFile: true,
+        outputPath,
+        fileName,
+      });
+
+      this.eventBus.emit('unifiedWriter:completed', {
+        outputPath: `${outputPath}/${fileName}`,
+        dynamicClassesCount: classArray.length,
+        staticClassesCount: staticClassArray.length,
+        cssLength: finalCSS.length,
+        pendingFiles: Array.from(this.pendingWrites),
+      });
+
+    } catch (error) {
+      this.eventBus.emit('unifiedWriter:writeError', {
+        error: (error as Error).message,
+        pendingFiles: Array.from(this.pendingWrites),
+      });
+      throw error;
+    }
+  }
+
+  // 生成静态CSS
+  private generateStaticCSS(staticClasses: string[]): string {
+    if (staticClasses.length === 0) {
+      return '';
+    }
+
+    let css = '';
+    const config = this.configManager.getConfig();
+    const baseClassName = config.baseClassName || {};
+
+    for (const className of staticClasses) {
+      if (baseClassName[className]) {
+        css += `.${className} { ${baseClassName[className]} }\n`;
+      }
+    }
+
+    return css;
+  }
+
+  // 合并CSS内容
+  private mergeCSS(dynamicCSS: string, staticCSS: string): string {
+    let finalCSS = '';
+
+    // 添加文件头注释
+    const timestamp = new Date().toISOString();
+    finalCSS += `/* Generated by Class2CSS on ${timestamp} */\n\n`;
+
+    // 添加静态CSS
+    if (staticCSS.trim()) {
+      finalCSS += '/* Static Classes */\n';
+      finalCSS += staticCSS;
+      finalCSS += '\n';
+    }
+
+    // 添加动态CSS
+    if (dynamicCSS.trim()) {
+      finalCSS += '/* Dynamic Classes */\n';
+      finalCSS += dynamicCSS;
+    }
+
+    return finalCSS;
+  }
+
+  // 立即写入（不防抖）
+  async immediateWrite(
+    fullScanManager: FullScanManager,
+    fileWriter: FileWriter,
+    reason: string = 'manual'
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // 清除防抖定时器
+      if (this.writeTimer) {
+        clearTimeout(this.writeTimer);
+        this.writeTimer = null;
+      }
+
+      this.eventBus.emit('unifiedWriter:immediate', {
+        reason,
+        pendingFiles: Array.from(this.pendingWrites),
+      });
+
+      await this.executeWrite(fullScanManager, fileWriter);
+
+      const writeTime = Date.now() - startTime;
+      this.recordWriteSuccess(writeTime);
+
+    } catch (error) {
+      this.recordWriteFailure();
+      this.eventBus.emit('unifiedWriter:immediateError', {
+        reason,
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+  }
+
+  // 设置防抖延迟时间
+  setDebounceDelay(delay: number): void {
+    if (typeof delay === 'number' && delay >= 0) {
+      this.debounceDelay = delay;
+      this.eventBus.emit('unifiedWriter:debounceDelayChanged', {
+        oldDelay: this.debounceDelay,
+        newDelay: delay,
+      });
+    }
+  }
+
+  // 获取待写入文件列表
+  getPendingWrites(): string[] {
+    return Array.from(this.pendingWrites);
+  }
+
+  // 清空待写入队列
+  clearPendingWrites(): void {
+    this.pendingWrites.clear();
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer);
+      this.writeTimer = null;
+    }
+    this.eventBus.emit('unifiedWriter:pendingCleared');
+  }
+
+  // 添加待写入文件
+  addPendingWrite(filePath: string): void {
+    this.pendingWrites.add(filePath);
+  }
+
+  // 检查是否有待写入文件
+  hasPendingWrites(): boolean {
+    return this.pendingWrites.size > 0 || this.writeTimer !== null;
+  }
+
+  // 记录写入成功
+  private recordWriteSuccess(writeTime: number): void {
+    this.stats.totalWrites++;
+    this.stats.successfulWrites++;
+    this.stats.lastWriteTime = new Date();
+
+    // 更新平均写入时间
+    this.writeTimes.push(writeTime);
+    if (this.writeTimes.length > 100) {
+      this.writeTimes.shift(); // 只保留最近100次的写入时间
+    }
+    this.stats.averageWriteTime = this.writeTimes.reduce((sum, time) => sum + time, 0) / this.writeTimes.length;
+  }
+
+  // 记录写入失败
+  private recordWriteFailure(): void {
+    this.stats.totalWrites++;
+    this.stats.failedWrites++;
+    this.stats.lastWriteTime = new Date();
+  }
+
+  // 获取写入统计信息
+  getWriteStats(): WriteStats {
+    return { ...this.stats };
+  }
+
+  // 重置统计信息
+  resetStats(): void {
+    this.stats = {
+      totalWrites: 0,
+      successfulWrites: 0,
+      failedWrites: 0,
+      lastWriteTime: null,
+      averageWriteTime: 0,
+    };
+    this.writeTimes = [];
+    this.eventBus.emit('unifiedWriter:stats:reset');
+  }
+
+  // 获取当前状态
+  getStatus(): {
+    isWriting: boolean;
+    pendingCount: number;
+    debounceDelay: number;
+    stats: WriteStats;
+  } {
+    return {
+      isWriting: this.writeTimer !== null,
+      pendingCount: this.pendingWrites.size,
+      debounceDelay: this.debounceDelay,
+      stats: this.getWriteStats(),
+    };
+  }
+
+  // 强制刷新
+  forceRefresh(): void {
+    this.clearPendingWrites();
+    this.eventBus.emit('unifiedWriter:forceRefresh');
+  }
+
+  // 预览将要写入的内容
+  async previewContent(fullScanManager: FullScanManager): Promise<{
+    dynamicCSS: string;
+    staticCSS: string;
+    mergedCSS: string;
+    classCount: number;
+    staticClassCount: number;
+  }> {
+    try {
+      const mergedData = fullScanManager.getMergedData();
+      const { classListSet, userStaticClassListSet } = mergedData;
+
+      const classArray = Array.from(classListSet);
+      const staticClassArray = Array.from(userStaticClassListSet);
+
+      const dynamicResult = this.dynamicClassGenerator.getClassList(classArray);
+      const staticCss = this.generateStaticCSS(staticClassArray);
+      const mergedCSS = this.mergeCSS(dynamicResult.cssStr, staticCss);
+
+      return {
+        dynamicCSS: dynamicResult.cssStr,
+        staticCSS: staticCss,
+        mergedCSS,
+        classCount: classArray.length,
+        staticClassCount: staticClassArray.length,
+      };
+    } catch (error) {
+      this.eventBus.emit('unifiedWriter:previewError', {
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+  }
+}
+
+export default UnifiedWriter;
