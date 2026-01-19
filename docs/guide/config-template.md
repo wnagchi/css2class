@@ -24,11 +24,9 @@ const config = {
     compression: true,
     // 是否对生成的CSS类进行字母排序（按选择器名称）
     sortClasses: true,
-    // 智能单位处理策略
+    // 智能单位处理策略（保留配置入口，具体逻辑以当前版本实现为准）
     unitStrategy: {
-      // 自动检测：如果用户写了单位，保持原单位；如果没写，使用默认单位
       autoDetect: true,
-      // 属性默认单位映射（值为空字符串表示无单位）
       propertyUnits: {
         'font-size': 'rpx',
         'width|height': 'rpx',

@@ -16,7 +16,8 @@
 - **关键字**：保持原样（如 `w-auto`、`h-auto`）
 
 :::warning 注意
-为了生成合法的 CSS，**不建议**在 class 名里使用 `%` 之类的特殊字符（虽然解析可能通过，但 CSS 选择器会变得难以匹配/需要转义）。
+为了生成合法的 CSS，**不建议**在 class 名里直接出现 `%` 等特殊字符（选择器会变得难以匹配/需要转义）。  
+推荐做法：用颜色 token（`bg-xxxx`）或写成带单位的安全值（`w-50px` / `w-10rpx`）。
 :::
 
 ---
@@ -55,7 +56,9 @@
 
 ---
 
-## 宽高 / 尺寸（`atomicRules.sizing`）
+## 宽高 / 尺寸（`atomicRules.sizing` + 静态类）
+
+动态：
 
 - **`w-{n}`**：`width`
 - **`h-{n}`**：`height`
@@ -65,29 +68,27 @@
 - **`min-h-{n}`**：`min-height`
 - **`size-{n}`**：`width` + `height`（兼容写法）
 
-示例：
-
-```html
-<view class="w-100 h-200 max-w-600 min-h-300"></view>
-```
-
-同时，你还内置了一些“静态尺寸类”（见下方 **布局/显示**）：
+静态：
 
 - **`w-full`**：`width: 100%`
 - **`h-full`**：`height: 100%`
 - **`w-screen`**：`width: 100vw`
 - **`h-screen`**：`height: 100vh`
 
+示例：
+
+```html
+<view class="w-100 h-200 max-w-600 min-h-300 w-full"></view>
+```
+
 ---
 
-## 文字（字号/粗细/行高/字距/对齐）
+## 文字（字号/粗细/行高/字距/对齐/装饰）
 
 ### 字号（`atomicRules.typography`）
 
 - **`text-{n}`**：`font-size`
 - **`text-size-{n}`**：`font-size`（更明确的别名，用来避免歧义）
-
-示例：
 
 ```html
 <text class="text-14"></text>
@@ -96,31 +97,45 @@
 
 ### 字重（两种方式）
 
-1) 动态（`atomicRules.typography`）
+动态（`atomicRules.typography`）：
 
 - **`font-{n}`**：`font-weight`（例如 `font-700`）
 
-2) 静态（`baseClassName`）
+静态（`baseClassName`）：
 
-- **`bold-thin`/`bold-light`/`bold-medium`/`bold-bold`/`bold-black`** 等（固定 `font-weight`）
+- **`bold-thin`**（100）
+- **`bold-extralight`**（200）
+- **`bold-light`**（300）
+- **`bold-normal`**（400）
+- **`bold-medium`**（500）
+- **`bold-semibold`**（600）
+- **`bold-bold`**（700）
+- **`bold-extrabold`**（800）
+- **`bold-black`**（900）
+- **`bold`**（`font-weight: bold;`）
 
 ### 行高 / 字间距（`atomicRules.typography`）
 
-- **`leading-{n}`**：`line-height`（通常建议用更可控的单位写法，例如 `leading-24px`）
+- **`leading-{n}`**：`line-height`
 - **`tracking-{n}`**：`letter-spacing`
 
-### 文本对齐（静态，`baseClassName`）
+:::tip
+`leading` 默认是“无单位属性”，建议写成更明确的单位值（例如 `leading-24px` / `leading-32rpx`）。
+:::
 
-- **`text-left`**
-- **`text-center`**
-- **`text-right`**
-- **`text-justify`**
+### 文本对齐（静态）
 
-### 文本装饰/省略（静态，`baseClassName`）
+- **`text-left`** / **`text-center`** / **`text-right`** / **`text-justify`**
+
+### 文本装饰/省略（静态）
 
 - **`underline`**
 - **`line-through`**
 - **`ellipsis`**：`overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`
+
+### 字体族（静态）
+
+- **`font-runyuan`**：`font-family: 'HYRunYuan-BOLD';`
 
 ---
 
@@ -132,20 +147,71 @@
 - **`bg-{token}`**：`background-color`
 - **`bcolor-{token}`**：`border-color`
 
-其中 `{token}` 来自你的颜色表（`baseColor`），例如：
+示例：
 
 ```html
 <text class="color-red"></text>
-<view class="bg-fafafa bcolor-cccccc"></view>
+<view class="bg-fafafa bcolor-cc"></view>
 ```
 
 :::tip
-如果你在 `class2css.config.js` 里往 `baseColor` 里加了 `brand: '#12b7f5'`，那么你立刻就能用 `color-brand/bg-brand/bcolor-brand`。
+如果你在 `class2css.config.js` 里往颜色表里加了 `brand: '#12b7f5'`，那么你立刻就能用 `color-brand/bg-brand/bcolor-brand`。
 :::
+
+<details>
+<summary>当前模板内置的颜色 token（展开查看）</summary>
+
+- 466580
+- 818182
+- 595959
+- 333333
+- 666666
+- 979797
+- 777777
+- 142640
+- fafafa
+- B3B3B3
+- F9F9F9
+- 9CA6B4
+- 040404
+- ECF5FF
+- black07
+- fffffe
+- B10A32
+- f4
+- f4f4f4
+- cc
+- white
+- black
+- transparent
+- slate
+- gray
+- gray1
+- gray4
+- zinc
+- red
+- orange
+- amber
+- yellow
+- lime
+- green
+- emerald
+- teal
+- cyan
+- sky
+- blue
+- indigo
+- violet
+- purple
+- fuchsia
+- pink
+- rose
+
+</details>
 
 ---
 
-## 布局 / 显示（静态类，`baseClassName`）
+## 布局 / 显示（静态类）
 
 ### Display
 
@@ -155,7 +221,7 @@
 - **`table`**
 - **`hidden`**
 
-### Flexbox（组合类）
+### Flexbox
 
 - **`flex-row`**, **`flex-col`**
 - **`flex-wrap`**, **`flex-nowrap`**
@@ -166,7 +232,20 @@
 
 ### Grid
 
-- **`grid-cols-2`** / **`grid-cols-3`** / **`grid-cols-4`** / …（模板里包含多种列数）
+<details>
+<summary>grid-cols（展开查看）</summary>
+
+- `grid-cols-2`
+- `grid-cols-3`
+- `grid-cols-4`
+- `grid-cols-5`
+- `grid-cols-6`
+- `grid-cols-7`
+- `grid-cols-8`
+- `grid-cols-9`
+- `grid-cols-10`
+
+</details>
 
 ### 定位（静态 + 动态）
 
