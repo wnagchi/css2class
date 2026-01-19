@@ -6,15 +6,21 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D14.0.0-brightgreen.svg)](https://nodejs.org)
 
+
+## 待办
+1. 增加缺失检查功能，不主动对class进行删除
+
 ## ✨ 主要特性
 
 - 🔧 **智能配置系统** - 新旧配置格式无缝兼容，自动冲突检测和修复
 - 🚀 **高性能缓存** - 多层缓存机制，增量更新，显著提升生成速度
 - 🎯 **智能单位处理** - 自动单位转换，支持rpx、px、em等多种单位
+- 🧾 **输出格式与排序** - 支持 `multiLine/singleLine/compressed` 格式，支持按选择器名称排序
 - 📊 **配置诊断** - 完整的配置健康检查和优化建议
 - 🔄 **实时监控** - 文件变更实时检测，配置热更新
 - 🛡️ **向后兼容** - 完全兼容旧版配置，零成本升级
 - 📱 **小程序优化** - 专为微信小程序设计，支持rpx单位
+- 🧩 **增量“只增不删”** - 统一文件模式支持从输出文件加载基线，可选 `appendDelta` 追加写入
 
 ## 🚀 快速开始
 
@@ -32,6 +38,13 @@ npm run start
 
 # 开发模式（文件监听）
 npm run dev
+
+# 构建模式（单次扫描后退出，不监听）
+npm run build
+
+# 查看帮助/版本
+npm run help
+npm run version
 ```
 
 ### 基础配置
@@ -42,12 +55,16 @@ npm run dev
 module.exports = {
   // ========== 系统基础配置 ==========
   system: {
+    // CSS 输出格式: 'multiLine' | 'singleLine' | 'compressed'
+    cssFormat: "compressed",
     // 基础单位设置
     baseUnit: "rpx",
     // 单位转换比例 生成样式单位=设置单位*比例
     unitConversion: 2,
     // 是否压缩CSS
     compression: true,
+    // 是否对生成的CSS类进行字母排序（按选择器名称）
+    sortClasses: true,
     // 智能单位处理策略
     unitStrategy: {
       // 自动检测：如果用户写了单位，保持原单位；如果没写，使用默认单位
@@ -146,7 +163,9 @@ module.exports = {
 使用内置诊断工具检查配置健康状况：
 
 ```javascript
-const { ConfigDiagnostics } = require('class2css');
+// 注意：当前包入口默认仅导出 Class2CSS
+// 如需使用诊断工具，可通过内部模块路径引用（未来版本可能调整路径）
+const ConfigDiagnostics = require('class2css/src/utils/ConfigDiagnostics');
 
 const diagnostics = new ConfigDiagnostics(eventBus, configManager);
 const results = await diagnostics.runFullDiagnostics();
@@ -208,6 +227,50 @@ console.log(stats);
 
 ## 🔧 高级功能
 
+### 增量模式（只增不删）与 appendDelta
+
+该能力主要面向 **统一文件模式（`cssOutType: 'uniFile'`）**，用于解决“历史输出文件累积了旧 class，不希望工具主动删除”的场景。
+
+- **incrementalOnlyAdd**：启用“只增不删”。运行期新增 class 会被保护，不会因为后续文件变化而删除。
+- **incrementalBaseline**：基线来源策略，目前支持从输出文件读取（`fromOutputFile`）。
+- **rebuildOnStart**：启动时是否重建输出文件（推荐开启）。开启后会全量扫描并覆盖写出一次，输出文件会被“清理到只包含当前项目使用的 class”，然后进入运行期只增不删。
+- **unusedReportLimit**：启动重建时，控制台打印“旧输出存在但当前未使用的 class”的最大示例数量。
+- **uniFileWriteMode**：
+  - `rewrite`：统一文件写入保持兼容（防抖全量覆盖写）。
+  - `appendDelta`：启动时写入 BASE 段 + `DELTA_START` 标记；运行期仅把新增 class 的 CSS 追加到文件末尾（更快、减少重写）。
+
+示例配置：
+
+```javascript
+module.exports = {
+  multiFile: {
+    entry: {
+      path: "./src", // 需要扫描/监听的目录
+      fileType: ["wxml", "html"],
+    },
+    output: {
+      cssOutType: "uniFile",
+      path: "./dist",
+      fileName: "styles.wxss",
+
+      // 增量“只增不删”
+      incrementalOnlyAdd: true,
+      incrementalBaseline: "fromOutputFile",
+      rebuildOnStart: true,
+      unusedReportLimit: 200,
+
+      // 统一文件写入策略
+      uniFileWriteMode: "appendDelta", // or 'rewrite'
+    },
+  },
+};
+```
+
+`appendDelta` 模式下输出文件会包含标记：
+
+- `/* CLASS2CSS:BASE */`：启动重建写入的基础段（压缩/排序后的全量结果）
+- `/* CLASS2CSS:DELTA_START */`：增量追加段起点（运行期新增 class 会追加到该标记之后）
+
 ### 配置模块化
 
 将大型配置拆分为多个模块：
@@ -245,7 +308,8 @@ module.exports = {
 ### 配置验证和自动修复
 
 ```javascript
-const { ConfigValidator } = require('class2css');
+// 注意：内部模块路径引用（未来版本可能调整路径）
+const ConfigValidator = require('class2css/src/core/ConfigValidator');
 
 const validator = new ConfigValidator(eventBus);
 const result = validator.validateConfig(config);
@@ -397,10 +461,11 @@ cacheManager.updateCacheStrategy({
 使用内置的兼容性适配器自动迁移：
 
 ```javascript
-const { CompatibilityAdapter } = require('class2css');
+// 注意：内部模块路径引用（未来版本可能调整路径）
+const CompatibilityAdapter = require('class2css/src/core/CompatibilityAdapter');
 
 const adapter = new CompatibilityAdapter(eventBus);
-const migratedConfig = adapter.migrateToNewFormat(oldConfig);
+const adaptedConfig = adapter.adaptConfig(oldConfig);
 ```
 
 ## 📊 最佳实践
@@ -464,11 +529,37 @@ system: {
 // package.json
 {
   "scripts": {
-    "css:dev": "class2css --watch",
-    "css:build": "class2css --build",
-    "css:diagnose": "class2css --diagnose"
+    "start": "node bin/class2css.js",
+    "dev": "node bin/class2css.js --config ./class2css.config.js",
+    "build": "node bin/class2css.js --no-watch",
+    "help": "node bin/class2css.js --help",
+    "version": "node bin/class2css.js --version"
   }
 }
+```
+
+## 🧰 CLI 使用说明
+
+安装后可通过 `class2css` 命令运行（或用 `node bin/class2css.js`）。常用参数：
+
+- **`-c, --config <path>`**：指定配置文件路径（默认 `./class2css.config.js`）
+- **`--no-watch`**：关闭监听模式（执行一次扫描后退出）
+- **`-i, --input <path>`**：运行时覆盖输入目录（覆盖配置里的扫描/监听目录）
+- **`-o, --output <path>`**：运行时覆盖输出目录
+- **`-f, --output-file <name>`**：运行时覆盖输出文件名
+- **`-t, --output-type <type>`**：运行时覆盖输出类型（`filePath` 或 `uniFile`）
+
+示例：
+
+```bash
+# 默认配置启动（监听模式）
+class2css
+
+# 单次构建（不监听）
+class2css --no-watch
+
+# 运行时覆盖输入/输出
+class2css -i ./src -o ./dist -f styles.wxss -t uniFile
 ```
 
 ## 🐛 故障排除
@@ -496,6 +587,7 @@ system: {
 
 ```javascript
 // 运行完整诊断
+const ConfigDiagnostics = require('class2css/src/utils/ConfigDiagnostics');
 const diagnostics = new ConfigDiagnostics(eventBus, configManager);
 const results = await diagnostics.runFullDiagnostics();
 console.log(diagnostics.generateReport());

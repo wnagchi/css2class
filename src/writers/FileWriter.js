@@ -160,6 +160,113 @@ class FileWriter {
     }
   }
 
+  // 追加CSS到文件末尾（用于 appendDelta 模式）
+  async appendCSS(cssContent, filePath, options = {}) {
+    try {
+      const multiFile = this.configManager.getMultiFile();
+      if (!multiFile) {
+        throw new Error('MultiFile configuration is required for CSS writing');
+      }
+
+      const outputConfig = multiFile.output;
+      const cssOutType = outputConfig.cssOutType || 'filePath';
+
+      let outputPath;
+
+      // 强制统一文件模式（由UnifiedWriter调用时）
+      if (options.forceUniFile || cssOutType === 'uniFile') {
+        const outputDir = options.outputPath || outputConfig.path || './';
+        const fileName = options.fileName || outputConfig.fileName || 'common.wxss';
+        outputPath = path.join(outputDir, fileName);
+      } else {
+        throw new Error('appendCSS is only supported for uniFile mode');
+      }
+
+      // 确保输出目录存在
+      await this.ensureDirectoryExists(path.dirname(outputPath));
+
+      // 追加内容到文件末尾（确保前后有换行，避免粘连）
+      const contentToAppend = cssContent.trim();
+      if (contentToAppend) {
+        const appendContent = '\n' + contentToAppend + '\n';
+        await fs.appendFile(outputPath, appendContent, 'utf-8');
+
+        this.eventBus.emit('file:css:appended', {
+          sourceFile: filePath,
+          outputFile: outputPath,
+          cssLength: cssContent.length,
+        });
+      }
+
+      return {
+        success: true,
+        outputPath: outputPath,
+        cssLength: cssContent.length,
+      };
+    } catch (error) {
+      this.eventBus.emit('file:css:append:error', {
+        sourceFile: filePath,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  // 写入BASE区块并添加DELTA_START标记（用于 appendDelta 模式的启动重建）
+  async writeBaseWithDeltaMarker(baseCssContent, filePath, options = {}) {
+    try {
+      const multiFile = this.configManager.getMultiFile();
+      if (!multiFile) {
+        throw new Error('MultiFile configuration is required for CSS writing');
+      }
+
+      const outputConfig = multiFile.output;
+      const cssOutType = outputConfig.cssOutType || 'filePath';
+
+      let outputPath;
+      let fileName;
+
+      // 强制统一文件模式
+      if (options.forceUniFile || cssOutType === 'uniFile') {
+        const outputDir = options.outputPath || outputConfig.path || './';
+        fileName = options.fileName || outputConfig.fileName || 'common.wxss';
+        outputPath = path.join(outputDir, fileName);
+      } else {
+        throw new Error('writeBaseWithDeltaMarker is only supported for uniFile mode');
+      }
+
+      // 确保输出目录存在
+      await this.ensureDirectoryExists(path.dirname(outputPath));
+
+      // 构建包含BASE标记和DELTA_START标记的内容
+      const baseMarker = '/* CLASS2CSS:BASE */\n';
+      const deltaMarker = '\n/* CLASS2CSS:DELTA_START */\n';
+      const fullContent = baseMarker + baseCssContent.trim() + deltaMarker;
+
+      // 覆盖写入文件（清空旧内容）
+      await this.fileUtils.writeFile(outputPath, fullContent, 'utf-8');
+
+      this.eventBus.emit('file:css:baseWritten', {
+        sourceFile: filePath,
+        outputFile: outputPath,
+        cssLength: baseCssContent.length,
+      });
+
+      return {
+        success: true,
+        outputPath: outputPath,
+        fileName: fileName,
+        cssLength: baseCssContent.length,
+      };
+    } catch (error) {
+      this.eventBus.emit('file:css:baseWrite:error', {
+        sourceFile: filePath,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
   // 获取输出配置信息
   getOutputConfig() {
     const multiFile = this.configManager.getMultiFile();

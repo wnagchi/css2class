@@ -9,17 +9,55 @@ class FullScanManager {
     this.isLocked = false;
     this.scanTime = null;
     this.fileDataMap = new Map(); // 存储每个文件的样式数据
+    
+    // 引用计数：用于防止共享 class 被误删
+    this.classRefCount = new Map(); // className -> count
+    this.staticRefCount = new Map(); // staticClassName -> count
+    
+    // 基线 class 集合（增量模式下从输出文件加载的 class，不应被删除）
+    this.baselineClassSet = new Set();
+    this.baselineStaticClassSet = new Set();
+    
+    // 增量模式开关（运行期新增 class 是否自动加入 baseline）
+    this.incrementalMode = false;
   }
 
   // 全量扫描所有文件
-  async performFullScan(watchPath, fileTypes, classParser, cacheManager) {
+  async performFullScan(watchPath, fileTypes, classParser, cacheManager, preserveBaseline = true) {
     try {
       this.eventBus.emit('fullScan:started', { watchPath, fileTypes });
 
       // 清空现有数据
-      this.classListSet.clear();
-      this.userStaticClassListSet.clear();
-      this.fileDataMap.clear();
+      if (preserveBaseline) {
+        // 保留基线 class
+        const baselineClasses = Array.from(this.baselineClassSet);
+        const baselineStaticClasses = Array.from(this.baselineStaticClassSet);
+        
+        this.classListSet.clear();
+        this.userStaticClassListSet.clear();
+        this.fileDataMap.clear();
+        this.classRefCount.clear();
+        this.staticRefCount.clear();
+        
+        // 恢复基线 class
+        for (const cls of baselineClasses) {
+          this.classListSet.add(cls);
+          this.classRefCount.set(cls, 0);
+        }
+        for (const cls of baselineStaticClasses) {
+          this.userStaticClassListSet.add(cls);
+          this.staticRefCount.set(cls, 0);
+        }
+      } else {
+        // 不保留基线，完全清空（用于重建场景）
+        this.classListSet.clear();
+        this.userStaticClassListSet.clear();
+        this.fileDataMap.clear();
+        this.classRefCount.clear();
+        this.staticRefCount.clear();
+        this.baselineClassSet.clear();
+        this.baselineStaticClassSet.clear();
+      }
 
       // 扫描所有文件
       const files = await this.scanDirectory(watchPath, fileTypes);
@@ -102,17 +140,66 @@ class FullScanManager {
 
   // 更新单个文件的数据
   updateFileData(filePath, classInfo) {
-    // 移除旧的文件数据
+    // 移除旧的文件数据（使用引用计数）
     if (this.fileDataMap.has(filePath)) {
       const oldData = this.fileDataMap.get(filePath);
-      oldData.classArr.forEach((cls) => this.classListSet.delete(cls));
-      oldData.userStaticClassArr.forEach((cls) => this.userStaticClassListSet.delete(cls));
+      
+      // 对旧数据的每个 class 减少引用计数
+      for (const cls of oldData.classArr) {
+        // 如果是基线 class，不删除
+        if (this.baselineClassSet.has(cls)) {
+          continue;
+        }
+        
+        const count = (this.classRefCount.get(cls) || 0) - 1;
+        if (count <= 0) {
+          this.classRefCount.delete(cls);
+          this.classListSet.delete(cls);
+        } else {
+          this.classRefCount.set(cls, count);
+        }
+      }
+      
+      for (const cls of oldData.userStaticClassArr) {
+        // 如果是基线 class，不删除
+        if (this.baselineStaticClassSet.has(cls)) {
+          continue;
+        }
+        
+        const count = (this.staticRefCount.get(cls) || 0) - 1;
+        if (count <= 0) {
+          this.staticRefCount.delete(cls);
+          this.userStaticClassListSet.delete(cls);
+        } else {
+          this.staticRefCount.set(cls, count);
+        }
+      }
     }
 
-    // 添加新的文件数据
+    // 添加新的文件数据（使用引用计数）
     this.fileDataMap.set(filePath, classInfo);
-    classInfo.classArr.forEach((cls) => this.classListSet.add(cls));
-    classInfo.userStaticClassArr.forEach((cls) => this.userStaticClassListSet.add(cls));
+    
+    for (const cls of classInfo.classArr) {
+      const count = (this.classRefCount.get(cls) || 0) + 1;
+      this.classRefCount.set(cls, count);
+      this.classListSet.add(cls);
+      
+      // 增量模式下，新增的 class 自动加入 baseline（保证只增不删）
+      if (this.incrementalMode) {
+        this.baselineClassSet.add(cls);
+      }
+    }
+    
+    for (const cls of classInfo.userStaticClassArr) {
+      const count = (this.staticRefCount.get(cls) || 0) + 1;
+      this.staticRefCount.set(cls, count);
+      this.userStaticClassListSet.add(cls);
+      
+      // 增量模式下，新增的 class 自动加入 baseline（保证只增不删）
+      if (this.incrementalMode) {
+        this.baselineStaticClassSet.add(cls);
+      }
+    }
 
     this.eventBus.emit('fullScan:fileUpdated', {
       filePath,
@@ -123,12 +210,42 @@ class FullScanManager {
     });
   }
 
-  // 移除文件数据
+  // 移除文件数据（使用引用计数）
   removeFileData(filePath) {
     if (this.fileDataMap.has(filePath)) {
       const data = this.fileDataMap.get(filePath);
-      data.classArr.forEach((cls) => this.classListSet.delete(cls));
-      data.userStaticClassArr.forEach((cls) => this.userStaticClassListSet.delete(cls));
+      
+      // 对每个 class 减少引用计数
+      for (const cls of data.classArr) {
+        // 如果是基线 class，不删除
+        if (this.baselineClassSet.has(cls)) {
+          continue;
+        }
+        
+        const count = (this.classRefCount.get(cls) || 0) - 1;
+        if (count <= 0) {
+          this.classRefCount.delete(cls);
+          this.classListSet.delete(cls);
+        } else {
+          this.classRefCount.set(cls, count);
+        }
+      }
+      
+      for (const cls of data.userStaticClassArr) {
+        // 如果是基线 class，不删除
+        if (this.baselineStaticClassSet.has(cls)) {
+          continue;
+        }
+        
+        const count = (this.staticRefCount.get(cls) || 0) - 1;
+        if (count <= 0) {
+          this.staticRefCount.delete(cls);
+          this.userStaticClassListSet.delete(cls);
+        } else {
+          this.staticRefCount.set(cls, count);
+        }
+      }
+      
       this.fileDataMap.delete(filePath);
 
       this.eventBus.emit('fullScan:fileRemoved', {
@@ -166,6 +283,40 @@ class FullScanManager {
       scanTime: this.scanTime,
       fileCount: this.fileDataMap.size,
     };
+  }
+
+  // 添加基线 class（用于增量模式：从输出文件加载已存在的 class）
+  addBaselineClasses(classList, staticClassList) {
+    for (const cls of classList) {
+      this.baselineClassSet.add(cls);
+      if (!this.classListSet.has(cls)) {
+        this.classListSet.add(cls);
+        this.classRefCount.set(cls, 0); // 基线 class 引用计数为 0，但通过 baselineClassSet 保护
+      }
+    }
+    
+    for (const cls of staticClassList) {
+      this.baselineStaticClassSet.add(cls);
+      if (!this.userStaticClassListSet.has(cls)) {
+        this.userStaticClassListSet.add(cls);
+        this.staticRefCount.set(cls, 0); // 基线 class 引用计数为 0，但通过 baselineStaticClassSet 保护
+      }
+    }
+    
+    this.eventBus.emit('fullScan:baselineAdded', {
+      classCount: classList.length,
+      staticClassCount: staticClassList.length,
+      totalClassCount: this.classListSet.size,
+      totalStaticClassCount: this.userStaticClassListSet.size,
+    });
+  }
+
+  // 设置增量模式开关（运行期新增 class 是否自动加入 baseline，从而“只增不删”）
+  setIncrementalMode(enabled) {
+    this.incrementalMode = !!enabled;
+    if (this.eventBus && typeof this.eventBus.emit === 'function') {
+      this.eventBus.emit('fullScan:incrementalModeChanged', { enabled: this.incrementalMode });
+    }
   }
 
   // 获取统计信息

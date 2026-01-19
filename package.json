@@ -7,9 +7,10 @@
     "class2css": "./bin/class2css.js"
   },
   "scripts": {
-    "start": "node bin/class2css.js",
-    "start:no-watch": "node bin/class2css.js --no-watch",
+    "start": "node bin/class2css.js --docs",
+    "build": "node bin/class2css.js --no-watch",
     "dev": "node bin/class2css.js --config ./class2css.config.js",
+    "docs:dev": "vitepress dev docs",
     "test": "node src/example.js",
     "help": "node bin/class2css.js --help",
     "version": "node bin/class2css.js --version"
@@ -42,6 +43,7 @@
     "eslint": "8.57.1",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.4",
-    "prettier": "3.6.2"
+    "prettier": "3.6.2",
+    "vitepress": "^1.6.4"
   }
 }

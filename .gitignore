@@ -67,6 +67,11 @@ coverage/
 # vuepress build output
 .vuepress/dist
 
+# VitePress build/cache output
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/.vitepress/.temp/
+
 # Serverless directories
 .serverless/
 

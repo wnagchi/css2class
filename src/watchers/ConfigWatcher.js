@@ -51,7 +51,7 @@ class ConfigWatcher {
       }
 
       this.configPath = path.resolve(configPath);
-      this.logger.info(`开始监听配置文件: ${this.configPath}`);
+      // this.logger.info(`开始监听配置文件: ${this.configPath}`);
 
       // 创建文件监听器
       this.watcher = chokidar.watch(this.configPath, {

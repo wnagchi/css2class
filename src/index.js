@@ -15,6 +15,8 @@ const FileWatcher = require('./watchers/FileWatcher');
 const ConfigWatcher = require('./watchers/ConfigWatcher');
 const FileWriter = require('./writers/FileWriter');
 const UnifiedWriter = require('./writers/UnifiedWriter');
+const WxssClassExtractor = require('./utils/WxssClassExtractor');
+const path = require('path');
 
 class Class2CSS {
   constructor(options = {}) {
@@ -24,6 +26,13 @@ class Class2CSS {
     
     // 构建时间追踪：存储文件路径到开始时间的映射
     this.buildStartTimes = new Map();
+    
+    // appendDelta 模式：追踪已写入的 class（用于判断哪些是新增的）
+    this.everWrittenClassSet = new Set();
+    this.everWrittenStaticClassSet = new Set();
+
+    // 解析失败追踪：用于抑制保存期的瞬时失败噪音（连续失败才告警）
+    this.parseFailureCounts = new Map(); // filePath -> count
 
     // 初始化核心模块
     this.initializeModules();
@@ -103,6 +112,9 @@ class Class2CSS {
         this.dynamicClassGenerator
       );
 
+      // 17. 创建 WXSS class 提取器（用于增量模式）
+      this.wxssExtractor = new WxssClassExtractor(this.eventBus);
+
       // 检查并设置统一文件模式
       const multiFile = this.configManager.getMultiFile();
       const isUnifiedMode = multiFile?.output?.cssOutType === 'uniFile';
@@ -134,9 +146,9 @@ class Class2CSS {
     });
 
     // 解析相关事件
-    this.eventBus.on('parser:completed', (stats) => {
-      // this.logger.parser(`Parsing completed: ${stats.totalCount} classes found`);
-    });
+    // this.eventBus.on('parser:completed', (stats) => {
+    //   this.logger.parser(`Parsing completed: ${stats.totalCount} classes found`);
+    // });
 
     this.eventBus.on('parser:error', (error) => {
       this.logger.error('解析器错误:', error);
@@ -161,17 +173,17 @@ class Class2CSS {
     });
 
     // 文件监听相关事件
-    this.eventBus.on('watcher:ready', (data) => {
-      this.logger.info(`文件监听器就绪: ${data.path}`);
-    });
+    // this.eventBus.on('watcher:ready', (data) => {
+    //   this.logger.info(`文件监听器就绪: ${data.path}`);
+    // });
 
     this.eventBus.on('file:changed', (filePath) => {
-      this.logger.info(`文件已更改: ${filePath}`);
+      // this.logger.info(`文件已更改: ${filePath}`);
       this.handleFileChange(filePath);
     });
 
     this.eventBus.on('file:added', (filePath) => {
-      this.logger.info(`文件已添加: ${filePath}`);
+      // this.logger.info(`文件已添加: ${filePath}`);
       this.handleFileChange(filePath);
     });
 
@@ -217,9 +229,9 @@ class Class2CSS {
     });
 
     // 配置监听相关事件
-    this.eventBus.on('config:watcher:ready', (data) => {
-      this.logger.info(`配置监听器就绪: ${data.configPath}`);
-    });
+    // this.eventBus.on('config:watcher:ready', (data) => {
+    //   this.logger.info(`配置监听器就绪: ${data.configPath}`);
+    // });
 
     this.eventBus.on('config:reload:start', (data) => {
       this.logger.info(`配置重载开始 (第${data.reloadCount}次)`);
@@ -324,8 +336,153 @@ class Class2CSS {
         throw new Error(`Configuration validation failed: ${configErrors.join(', ')}`);
       }
 
-      // 执行初始全量扫描
-      await this.performFullScan();
+      const multiFile = this.configManager.getMultiFile();
+      const isIncrementalMode = this.stateManager.isInUnifiedFileMode() && multiFile?.output?.incrementalOnlyAdd;
+      const rebuildOnStart = multiFile?.output?.rebuildOnStart !== false; // 默认 true
+      const uniFileWriteMode = multiFile?.output?.uniFileWriteMode || 'rewrite';
+
+      // 如果是 appendDelta 模式
+      if (this.stateManager.isInUnifiedFileMode() && uniFileWriteMode === 'appendDelta') {
+        // appendDelta 模式要求 rebuildOnStart=true
+        if (!rebuildOnStart) {
+          throw new Error('uniFileWriteMode="appendDelta" requires rebuildOnStart=true');
+        }
+
+        // 1. 读取旧输出文件，提取 oldBaselineSet（用于后续 unused 提示）
+        let oldBaselineClassSet = new Set();
+        let oldBaselineStaticSet = new Set();
+        
+        try {
+          const outputPath = multiFile.output.path;
+          const fileName = multiFile.output.fileName || 'index.wxss';
+          const outputFilePath = path.join(outputPath, fileName);
+          
+          this.logger.info(`appendDelta 模式启动重建: 正在读取旧输出文件 ${outputFilePath}`);
+          const { classList, staticClassList } = await this.wxssExtractor.extractClassesFromFile(
+            outputFilePath
+          );
+          oldBaselineClassSet = classList;
+          oldBaselineStaticSet = staticClassList;
+          
+          if (classList.size > 0 || staticClassList.size > 0) {
+            this.logger.info(
+              `读取到旧输出文件: ${classList.size} 个动态类, ${staticClassList.size} 个静态类`
+            );
+          }
+        } catch (error) {
+          // 文件不存在或读取失败，继续执行重建（当作首次运行）
+          this.logger.info('旧输出文件不存在或读取失败，将执行首次重建');
+        }
+
+        // 2. 执行全量扫描（不保留旧基线，完全重建）
+        const rebuildScanStart = Date.now();
+        this.logger.info('执行全量扫描（appendDelta 重建模式）...');
+        await this.performFullScan(false); // preserveBaseline = false
+        const rebuildScanMs = Date.now() - rebuildScanStart;
+        this.logger.info(`appendDelta 启动重建：全量扫描耗时 ${rebuildScanMs}ms`);
+
+        // 3. 生成 BASE CSS（全量生成，压缩+排序）
+        const mergedData = this.fullScanManager.getMergedData();
+        const baseGenStart = Date.now();
+        const baseCssContent = await this.unifiedWriter.generateUnifiedCSS(
+          mergedData.classListSet,
+          mergedData.userStaticClassListSet
+        );
+        const baseGenMs = Date.now() - baseGenStart;
+        this.logger.info(`appendDelta 启动重建：BASE CSS 生成耗时 ${baseGenMs}ms`);
+
+        // 4. 写入 BASE + DELTA_START 标记（覆盖写，清空旧 DELTA）
+        this.logger.info('正在写入 BASE 区块和 DELTA_START 标记...');
+        const baseWriteStart = Date.now();
+        await this.fileWriter.writeBaseWithDeltaMarker(baseCssContent, 'startup-rebuild', {
+          forceUniFile: true,
+          outputPath: multiFile.output.path,
+          fileName: multiFile.output.fileName,
+        });
+        const baseWriteMs = Date.now() - baseWriteStart;
+        this.logger.info(`appendDelta 启动重建：BASE 写入耗时 ${baseWriteMs}ms`);
+
+        // 5. 记录已写入的 class（用于后续判断新增）
+        this.everWrittenClassSet = new Set(mergedData.classListSet);
+        this.everWrittenStaticClassSet = new Set(mergedData.userStaticClassListSet);
+
+        // 6. 计算并打印 unused：oldBaselineSet - scannedSet
+        await this.reportUnusedClassesOnRebuild(oldBaselineClassSet, oldBaselineStaticSet);
+
+        // 7. 初始化运行期 baseline：把当前扫描集合写入 baseline，并开启增量模式
+        this.fullScanManager.addBaselineClasses(
+          Array.from(mergedData.classListSet),
+          Array.from(mergedData.userStaticClassListSet)
+        );
+        this.fullScanManager.setIncrementalMode(true);
+        this.logger.info('appendDelta 模式已启用：运行期将只追加新增 class');
+      }
+      // 如果是增量模式且开启了启动重建（rewrite 模式）
+      else if (isIncrementalMode && rebuildOnStart) {
+        // 1. 读取旧输出文件，提取 oldBaselineSet（用于后续 unused 提示）
+        let oldBaselineClassSet = new Set();
+        let oldBaselineStaticSet = new Set();
+        
+        try {
+          const outputPath = multiFile.output.path;
+          const fileName = multiFile.output.fileName || 'index.wxss';
+          const outputFilePath = path.join(outputPath, fileName);
+          
+          this.logger.info(`增量模式启动重建: 正在读取旧输出文件 ${outputFilePath}`);
+          const { classList, staticClassList } = await this.wxssExtractor.extractClassesFromFile(
+            outputFilePath
+          );
+          oldBaselineClassSet = classList;
+          oldBaselineStaticSet = staticClassList;
+          
+          if (classList.size > 0 || staticClassList.size > 0) {
+            this.logger.info(
+              `读取到旧输出文件: ${classList.size} 个动态类, ${staticClassList.size} 个静态类`
+            );
+          }
+        } catch (error) {
+          // 文件不存在或读取失败，继续执行重建（当作首次运行）
+          this.logger.info('旧输出文件不存在或读取失败，将执行首次重建');
+        }
+
+        // 2. 执行全量扫描（不保留旧基线，完全重建）
+        this.logger.info('执行全量扫描（重建模式）...');
+        await this.performFullScan(false); // preserveBaseline = false
+
+        // 3. 立即写入一次 uniFile（覆盖写，得到干净、排序好的输出）
+        this.logger.info('正在写入重建后的输出文件...');
+        await this.unifiedWriter.immediateWrite(
+          this.fullScanManager,
+          this.fileWriter,
+          'startup-rebuild'
+        );
+
+        // 4. 计算并打印 unused：oldBaselineSet - scannedSet
+        await this.reportUnusedClassesOnRebuild(oldBaselineClassSet, oldBaselineStaticSet);
+
+        // 5. 初始化运行期 baseline：把当前扫描集合写入 baseline，并开启增量模式
+        const mergedData = this.fullScanManager.getMergedData();
+        this.fullScanManager.addBaselineClasses(
+          Array.from(mergedData.classListSet),
+          Array.from(mergedData.userStaticClassListSet)
+        );
+        this.fullScanManager.setIncrementalMode(true);
+        this.logger.info('运行期增量模式已启用（只增不删）');
+      } else if (isIncrementalMode && !rebuildOnStart) {
+        // 增量模式但 rebuildOnStart=false：按原有逻辑从输出文件加载基线
+        await this.loadIncrementalBaseline();
+        await this.performFullScan();
+        // 初始化运行期 baseline
+        const mergedData = this.fullScanManager.getMergedData();
+        this.fullScanManager.addBaselineClasses(
+          Array.from(mergedData.classListSet),
+          Array.from(mergedData.userStaticClassListSet)
+        );
+        this.fullScanManager.setIncrementalMode(true);
+      } else {
+        // 标准模式：正常执行全量扫描
+        await this.performFullScan();
+      }
 
       // 启动文件监听
       await this.fileWatcher.startWatching();
@@ -370,7 +527,7 @@ class Class2CSS {
   }
 
   // 执行全量扫描
-  async performFullScan() {
+  async performFullScan(preserveBaseline = true) {
     if (this.stateManager.isCurrentlyScanning()) {
       this.logger.scan('Full scan already in progress, skipping');
       return;
@@ -390,7 +547,8 @@ class Class2CSS {
         multiFile.entry.path,
         multiFile.entry.fileType || ['html', 'wxml'],
         this.classParser,
-        this.cacheManager
+        this.cacheManager,
+        preserveBaseline
       );
 
       // 同步状态到StateManager
@@ -401,14 +559,20 @@ class Class2CSS {
       );
       this.stateManager.setScanCompleted();
 
-      // 如果是统一文件模式，执行初始写入
-      if (this.stateManager.isInUnifiedFileMode()) {
+      // 如果是统一文件模式，执行初始写入（仅在非重建场景，重建场景已在 start() 中处理）
+      if (this.stateManager.isInUnifiedFileMode() && preserveBaseline) {
         this.logger.info('检测到统一文件模式，正在执行初始写入...');
         await this.unifiedWriter.immediateWrite(
           this.fullScanManager,
           this.fileWriter,
           'initial-scan'
         );
+
+        // 如果是增量模式但未开启 rebuildOnStart，检查并报告未使用的 class
+        const multiFile = this.configManager.getMultiFile();
+        if (multiFile?.output?.incrementalOnlyAdd && !multiFile?.output?.rebuildOnStart) {
+          await this.reportUnusedClasses();
+        }
       }
 
       return result;
@@ -431,13 +595,42 @@ class Class2CSS {
       // 记录构建开始时间
       this.buildStartTimes.set(filePath, Date.now());
       
-      this.logger.info(`正在处理文件变更: ${filePath}`);
+      // this.logger.info(`正在处理文件变更: ${filePath}`);
 
       // 解析文件
-      const classInfo = await this.classParser.parseFile(filePath, this.cacheManager);
+      let classInfo = null;
+      // 保存过程中可能读到空内容/锁定，做轻量重试；若仍失败，延迟再试并抑制噪音
+      for (let attempt = 0; attempt < 3; attempt++) {
+        classInfo = await this.classParser.parseFile(filePath, this.cacheManager);
+        if (classInfo) break;
+        await new Promise((resolve) => setTimeout(resolve, 120 * Math.pow(2, attempt)));
+      }
+
       if (!classInfo) {
-        this.logger.warn(`解析文件失败: ${filePath}`);
+        const nextCount = (this.parseFailureCounts.get(filePath) || 0) + 1;
+        this.parseFailureCounts.set(filePath, nextCount);
+
+        // 用节流做一次“稍后重试”，避免保存风暴期间疯狂刷 warn
+        this.throttle.throttle(
+          `reparse:${filePath}`,
+          () => {
+            // 重新触发处理（异步，不阻塞 throttle 回调）
+            this.handleFileChange(filePath).catch(() => {});
+          },
+          800,
+          1
+        );
+
+        // 连续失败到一定次数才告警（默认 3 次）
+        if (nextCount >= 3) {
+          this.logger.warn(`解析文件失败(连续${nextCount}次): ${filePath}，已安排重试`);
+        }
         return;
+      }
+
+      // 成功则清零失败计数
+      if (this.parseFailureCounts.has(filePath)) {
+        this.parseFailureCounts.delete(filePath);
       }
 
       // console.log(
@@ -446,12 +639,65 @@ class Class2CSS {
 
       // 根据输出模式选择处理策略
       if (this.stateManager.isInUnifiedFileMode()) {
-        // 统一文件模式：更新全量数据并触发防抖写入
+        const multiFile = this.configManager.getMultiFile();
+        const uniFileWriteMode = multiFile?.output?.uniFileWriteMode || 'rewrite';
+
+        // 更新全量数据
         this.fullScanManager.updateFileData(filePath, classInfo);
         this.stateManager.syncWithFullScanManager(this.fullScanManager.getMergedData());
 
-        // 使用防抖写入
-        this.unifiedWriter.debouncedWrite(this.fullScanManager, this.fileWriter, filePath);
+        // appendDelta 模式：只追加新增的 class
+        if (uniFileWriteMode === 'appendDelta') {
+          const mergedData = this.fullScanManager.getMergedData();
+          
+          // 计算新增的 class（当前扫描到的 - 已写入的）
+          const newClasses = Array.from(mergedData.classListSet).filter(
+            (cls) => !this.everWrittenClassSet.has(cls)
+          );
+          const newStaticClasses = Array.from(mergedData.userStaticClassListSet).filter(
+            (cls) => !this.everWrittenStaticClassSet.has(cls)
+          );
+
+          if (newClasses.length > 0 || newStaticClasses.length > 0) {
+            // 生成新增 class 的 CSS
+            const deltaGenStart = Date.now();
+            const deltaCssContent = await this.generateDeltaCSS(newClasses, newStaticClasses);
+            const deltaGenMs = Date.now() - deltaGenStart;
+
+            if (deltaCssContent.trim()) {
+              // 追加到文件末尾
+              const appendStart = Date.now();
+              await this.fileWriter.appendCSS(deltaCssContent, filePath, {
+                forceUniFile: true,
+                outputPath: multiFile.output.path,
+                fileName: multiFile.output.fileName,
+              });
+              const appendMs = Date.now() - appendStart;
+
+              // 记录已写入的 class
+              newClasses.forEach((cls) => this.everWrittenClassSet.add(cls));
+              newStaticClasses.forEach((cls) => this.everWrittenStaticClassSet.add(cls));
+
+              // 同时加入 baseline（保证只增不删）
+              this.fullScanManager.addBaselineClasses(newClasses, newStaticClasses);
+
+              // 打印新增动态类名（限制数量，避免刷屏）
+              const maxLogClasses = 20;
+              const dynamicPreview = newClasses.slice(0, maxLogClasses);
+              const dynamicMore = newClasses.length > maxLogClasses ? ` ...(+${newClasses.length - maxLogClasses})` : '';
+
+              this.logger.info(
+                `appendDelta: 追加了 ${newClasses.length} 个动态类, ${newStaticClasses.length} 个静态类（生成 ${deltaGenMs}ms，写入 ${appendMs}ms）` +
+                  (newClasses.length > 0
+                    ? ` 新增动态类: ${dynamicPreview.join(', ')}${dynamicMore}`
+                    : '')
+              );
+            }
+          }
+        } else {
+          // rewrite 模式：使用防抖写入（全量覆盖）
+          this.unifiedWriter.debouncedWrite(this.fullScanManager, this.fileWriter, filePath);
+        }
 
         // this.logger.info(`统一文件模式: 已更新 ${filePath} 的数据，触发防抖写入`);
       } else {
@@ -509,6 +755,209 @@ class Class2CSS {
     }
   }
   
+  // 加载增量模式的基线（从输出文件读取已存在的 class）
+  async loadIncrementalBaseline() {
+    try {
+      const multiFile = this.configManager.getMultiFile();
+      if (!multiFile || !multiFile.output) {
+        return;
+      }
+
+      const outputPath = multiFile.output.path;
+      const fileName = multiFile.output.fileName || 'index.wxss';
+      const outputFilePath = path.join(outputPath, fileName);
+
+      this.logger.info(`正在加载增量基线: ${outputFilePath}`);
+
+      const { classList, staticClassList } = await this.wxssExtractor.extractClassesFromFile(
+        outputFilePath
+      );
+
+      if (classList.size > 0 || staticClassList.size > 0) {
+        this.fullScanManager.addBaselineClasses(
+          Array.from(classList),
+          Array.from(staticClassList)
+        );
+        this.logger.info(
+          `增量基线加载完成: ${classList.size} 个动态类, ${staticClassList.size} 个静态类`
+        );
+      } else {
+        this.logger.info('输出文件不存在或为空，跳过基线加载');
+      }
+    } catch (error) {
+      this.logger.warn(`加载增量基线失败: ${error.message}`);
+      // 基线加载失败不影响正常流程
+    }
+  }
+
+  // 生成增量 CSS（仅生成新增 class 的规则，用于 appendDelta 模式）
+  async generateDeltaCSS(newClasses, newStaticClasses) {
+    try {
+      if ((!newClasses || newClasses.length === 0) && (!newStaticClasses || newStaticClasses.length === 0)) {
+        return '';
+      }
+
+      // 生成动态CSS（仅新增的 class）
+      const dynamicResult = this.dynamicClassGenerator.getClassList(newClasses);
+
+      // 生成用户基础类CSS（基于新增动态类）
+      const userBaseResult = this.dynamicClassGenerator.createUserBaseClassList(
+        dynamicResult.userBaseClassArr
+      );
+
+      // 生成静态类CSS（仅新增的静态类）
+      const staticResult = await this.unifiedWriter.generateStaticCSS(newStaticClasses);
+
+      // 合并CSS内容（不包含 commonCss，因为已经在 BASE 中）
+      let cssContent = [dynamicResult.cssStr, staticResult, userBaseResult]
+        .filter(Boolean)
+        .join('\n');
+
+      // 格式化（压缩），但不排序（因为只是追加）
+      const cssFormat = this.configManager.getCssFormat();
+      const CssFormatter = require('./utils/CssFormatter');
+      const cssFormatter = new CssFormatter(cssFormat);
+      cssContent = cssFormatter.formatCSS(cssContent, cssFormat);
+
+      return cssContent;
+    } catch (error) {
+      this.logger.error(`生成增量 CSS 失败: ${error.message}`);
+      return '';
+    }
+  }
+
+  // 报告未使用的 class（重建场景：旧输出文件中存在但当前扫描未使用的）
+  async reportUnusedClassesOnRebuild(oldBaselineClassSet, oldBaselineStaticSet) {
+    try {
+      const multiFile = this.configManager.getMultiFile();
+      if (!multiFile || !multiFile.output) {
+        return;
+      }
+
+      const unusedReportLimit = multiFile.output.unusedReportLimit || 200;
+
+      // 获取当前扫描到的 class
+      const mergedData = this.fullScanManager.getMergedData();
+      const scannedClassSet = mergedData.classListSet;
+      const scannedStaticSet = mergedData.userStaticClassListSet;
+
+      // 计算未使用的 class
+      const unusedClasses = Array.from(oldBaselineClassSet).filter(
+        (cls) => !scannedClassSet.has(cls)
+      );
+      const unusedStaticClasses = Array.from(oldBaselineStaticSet).filter(
+        (cls) => !scannedStaticSet.has(cls)
+      );
+
+      const totalUnused = unusedClasses.length + unusedStaticClasses.length;
+
+      if (totalUnused > 0) {
+        console.log('\n⚠️  启动重建：检测到未使用的 class（已从输出文件中清理）:');
+        console.log(`   总数: ${totalUnused} (动态类: ${unusedClasses.length}, 静态类: ${unusedStaticClasses.length})`);
+
+        // 显示前 N 个示例
+        const displayLimit = Math.min(unusedReportLimit, totalUnused);
+        const displayClasses = [
+          ...unusedClasses.slice(0, Math.min(unusedReportLimit, unusedClasses.length)),
+          ...unusedStaticClasses.slice(0, Math.min(unusedReportLimit, unusedStaticClasses.length)),
+        ].slice(0, displayLimit);
+
+        if (displayClasses.length > 0) {
+          console.log(`   示例 (前 ${displayLimit} 个):`);
+          displayClasses.forEach((cls, index) => {
+            if (index < 20) {
+              // 只显示前 20 个，避免输出过长
+              console.log(`     - ${cls}`);
+            }
+          });
+          if (displayClasses.length > 20) {
+            console.log(`     ... 还有 ${displayClasses.length - 20} 个未显示`);
+          }
+        }
+
+        if (totalUnused > displayLimit) {
+          console.log(`   (仅显示前 ${displayLimit} 个，实际清理了 ${totalUnused} 个未使用的 class)`);
+        }
+
+        console.log('   提示: 这些 class 在上一版输出文件中存在，但当前项目扫描未使用，已在重建时清理。\n');
+      } else {
+        console.log('\n✅ 启动重建完成：未发现未使用的 class，输出文件已是最新状态。\n');
+      }
+    } catch (error) {
+      // 报告失败不影响正常流程
+      this.logger.warn(`检查未使用 class 失败: ${error.message}`);
+    }
+  }
+
+  // 报告未使用的 class（输出文件中存在但当前扫描未使用的）- 旧版本（用于非重建场景）
+  async reportUnusedClasses() {
+    try {
+      const multiFile = this.configManager.getMultiFile();
+      if (!multiFile || !multiFile.output) {
+        return;
+      }
+
+      const outputPath = multiFile.output.path;
+      const fileName = multiFile.output.fileName || 'index.wxss';
+      const outputFilePath = path.join(outputPath, fileName);
+      const unusedReportLimit = multiFile.output.unusedReportLimit || 200;
+
+      // 从输出文件提取所有 class
+      const { classList: baselineClassList, staticClassList: baselineStaticList } =
+        await this.wxssExtractor.extractClassesFromFile(outputFilePath);
+
+      // 获取当前扫描到的 class
+      const mergedData = this.fullScanManager.getMergedData();
+      const scannedClassSet = mergedData.classListSet;
+      const scannedStaticSet = mergedData.userStaticClassListSet;
+
+      // 计算未使用的 class
+      const unusedClasses = Array.from(baselineClassList).filter(
+        (cls) => !scannedClassSet.has(cls)
+      );
+      const unusedStaticClasses = Array.from(baselineStaticList).filter(
+        (cls) => !scannedStaticSet.has(cls)
+      );
+
+      const totalUnused = unusedClasses.length + unusedStaticClasses.length;
+
+      if (totalUnused > 0) {
+        console.log('\n⚠️  检测到未使用的 class:');
+        console.log(`   总数: ${totalUnused} (动态类: ${unusedClasses.length}, 静态类: ${unusedStaticClasses.length})`);
+
+        // 显示前 N 个示例
+        const displayLimit = Math.min(unusedReportLimit, totalUnused);
+        const displayClasses = [
+          ...unusedClasses.slice(0, Math.min(unusedReportLimit, unusedClasses.length)),
+          ...unusedStaticClasses.slice(0, Math.min(unusedReportLimit, unusedStaticClasses.length)),
+        ].slice(0, displayLimit);
+
+        if (displayClasses.length > 0) {
+          console.log(`   示例 (前 ${displayLimit} 个):`);
+          displayClasses.forEach((cls, index) => {
+            if (index < 20) {
+              // 只显示前 20 个，避免输出过长
+              console.log(`     - ${cls}`);
+            }
+          });
+          if (displayClasses.length > 20) {
+            console.log(`     ... 还有 ${displayClasses.length - 20} 个未显示`);
+          }
+        }
+
+        if (totalUnused > displayLimit) {
+          console.log(`   (仅显示前 ${displayLimit} 个，实际有 ${totalUnused} 个未使用的 class)`);
+        }
+
+        console.log('   提示: 这些 class 在输出文件中存在，但当前项目扫描未使用。');
+        console.log('   建议: 可以手动清理输出文件中的这些 class，或保留它们以备将来使用。\n');
+      }
+    } catch (error) {
+      // 报告失败不影响正常流程
+      this.logger.warn(`检查未使用 class 失败: ${error.message}`);
+    }
+  }
+
   // 计算统一文件模式的构建时间（取最早开始时间）
   calculateBuildTimeForUnified(filePaths) {
     if (!filePaths || filePaths.length === 0) {

@@ -30,8 +30,8 @@ class FileWatcher {
       // 构建文件匹配模式
       const patterns = fileTypes.map((type) => `${watchPath}/**/*.${type}`);
 
-      console.log('[FileWatcher] 监听路径:', watchPath);
-      console.log('[FileWatcher] 监听模式:', patterns);
+      // console.log('[FileWatcher] 监听路径:', watchPath);
+      // console.log('[FileWatcher] 监听模式:', patterns);
 
       this.eventBus.emit('watcher:starting', { path: watchPath, patterns });
 
@@ -43,7 +43,8 @@ class FileWatcher {
         interval: 150,
         binaryInterval: 300,
         awaitWriteFinish: {
-          stabilityThreshold: 100,
+          // Windows/编辑器保存时可能经历“清空/重写/替换”的瞬时状态，适当加大稳定窗口降低误触发
+          stabilityThreshold: 400,
           pollInterval: 100,
         },
       });
@@ -51,7 +52,7 @@ class FileWatcher {
       // 监听文件变化事件
       this.watcher
         .on('all', (event, filePath) => {
-          console.log(`[FileWatcher] 文件事件: ${event} -> ${filePath}`);
+         // console.log(`[FileWatcher] 文件事件: ${event} -> ${filePath}`);
           if (event === 'add') {
             this.eventBus.emit('file:added', filePath);
             this.eventBus.emit('file:changed', filePath);

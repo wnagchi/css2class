@@ -8,6 +8,7 @@ class CacheManager {
     // 文件缓存
     this.fileCache = new Map();
     this.fileStats = new Map();
+    this.fileSizes = new Map();
 
     // 全量扫描缓存
     this.fullScanCache = {
@@ -66,33 +67,64 @@ class CacheManager {
 
   // 文件缓存方法
   async getFileContent(filePath) {
-    try {
-      const stat = await fs.stat(filePath);
-      const cached = this.fileCache.get(filePath);
-      const cachedStat = this.fileStats.get(filePath);
+    const maxRetries = 3;
+    const baseDelayMs = 80;
 
-      if (cached && cachedStat && stat.mtime.getTime() === cachedStat) {
-        return cached;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const stat = await fs.stat(filePath);
+        const mtimeMs = stat.mtimeMs ?? stat.mtime.getTime();
+        const size = stat.size ?? 0;
+
+        const cached = this.fileCache.get(filePath);
+        const cachedMtime = this.fileStats.get(filePath);
+        const cachedSize = this.fileSizes.get(filePath);
+
+        // 同时校验 mtime 与 size，降低保存风暴/mtime 粒度导致的误命中
+        if (cached && cachedMtime && cachedSize !== undefined && mtimeMs === cachedMtime && size === cachedSize) {
+          return cached;
+        }
+
+        const content = await fs.readFile(filePath, 'utf-8');
+
+        // 保存过程可能短暂读到空内容；若文件 size>0，则短暂重试
+        if (content === '' && size > 0 && attempt < maxRetries) {
+          await sleep(baseDelayMs * Math.pow(2, attempt));
+          continue;
+        }
+
+        // LRU缓存清理
+        if (this.fileCache.size >= this.maxSize) {
+          const oldestKey = this.fileCache.keys().next().value;
+          this.fileCache.delete(oldestKey);
+          this.fileStats.delete(oldestKey);
+          this.fileSizes.delete(oldestKey);
+        }
+
+        this.fileCache.set(filePath, content);
+        this.fileStats.set(filePath, mtimeMs);
+        this.fileSizes.set(filePath, size);
+
+        this.eventBus.emit('cache:file:updated', filePath);
+        return content;
+      } catch (error) {
+        // 保存/替换时常见的瞬时错误：ENOENT/EBUSY/EPERM 等，做短暂重试
+        const code = error && error.code;
+        const retryableCodes = new Set(['ENOENT', 'EBUSY', 'EPERM', 'EACCES']);
+        if (attempt < maxRetries && retryableCodes.has(code)) {
+          await sleep(baseDelayMs * Math.pow(2, attempt));
+          continue;
+        }
+
+        this.eventBus.emit('cache:file:error', { filePath, error });
+        return null;
       }
-
-      const content = await fs.readFile(filePath, 'utf-8');
-
-      // LRU缓存清理
-      if (this.fileCache.size >= this.maxSize) {
-        const oldestKey = this.fileCache.keys().next().value;
-        this.fileCache.delete(oldestKey);
-        this.fileStats.delete(oldestKey);
-      }
-
-      this.fileCache.set(filePath, content);
-      this.fileStats.set(filePath, stat.mtime.getTime());
-
-      this.eventBus.emit('cache:file:updated', filePath);
-      return content;
-    } catch (error) {
-      this.eventBus.emit('cache:file:error', { filePath, error });
-      return null;
     }
+
+    // 理论上不会走到这里
+    return null;
   }
 
   // 全量扫描缓存方法
