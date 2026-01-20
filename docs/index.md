@@ -20,6 +20,8 @@ features:
     details: 用 `m-10`、`w-100` 这类表达直接生成样式，避免手写重复 CSS，保持风格一致。
   - title: 智能单位策略
     details: 支持 rpx/px 等单位；可自动检测用户单位，并按属性设置默认单位与转换比例。
+  - title: 直接颜色值
+    details: 支持 `bg-hex-fff`、`color-rgb-255-0-0` 等直接颜色值写法，无需预先配置颜色映射即可使用。
   - title: 增量只增不删
     details: 统一文件模式支持“只增不删”与 `appendDelta` 追加写入，兼顾性能与可控性。
   - title: 配置诊断与兼容
@@ -58,7 +60,7 @@ npm run example:weapp    # 显式跑 weapp 示例
 在模板里使用类名：
 
 ```html
-<view class="m-10 w-100 h-200"></view>
+<view class="m-10 w-100 h-200 bg-hex-fff color-rgb-0-0-0"></view>
 ```
 
 ## 下一步

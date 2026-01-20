@@ -172,6 +172,46 @@ baseClassName: {
 }
 ```
 
+#### 颜色族配置
+
+对于颜色相关的类，可以使用 `ABBR` 属性定义颜色族，然后通过颜色映射或直接颜色值来使用：
+
+```javascript
+baseClassName: {
+  // 颜色族：使用 ABBR 定义 CSS 属性名
+  color: { ABBR: "color" },
+  bg: { ABBR: "background-color" },
+  bcolor: { ABBR: "border-color" },
+  
+  // 其他静态类...
+  flex: "display: flex;"
+}
+
+// 颜色映射（通常在 styles.config.js 中定义）
+const baseColor = {
+  white: "#ffffff",
+  black: "#000000",
+  red: "#ef4444",
+  // ... 更多颜色
+};
+
+// 动态合并颜色映射到颜色族
+Object.values(baseClassName).forEach((item) => {
+  if (item && item.ABBR) {
+    Object.assign(item, baseColor);
+  }
+});
+```
+
+使用方式：
+
+- **颜色映射**：`bg-red`、`color-white`（需要预先配置）
+- **直接颜色值**：`bg-hex-fff`、`color-rgb-255-0-0`、`bg-rgba-0-0-0-05`（无需配置）
+
+:::tip 直接颜色值写法
+现在支持直接在 class 中写入颜色值，无需预先配置颜色映射。详见 [规则参考 - 颜色](./rules-reference.md#直接颜色值写法无需配置)。
+:::
+
 也可以阅读概念页：[Important 与静态类](./important-and-static.md)。
 
 ### multiFile 配置（多文件模式）

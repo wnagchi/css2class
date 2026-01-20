@@ -136,17 +136,20 @@ class DynamicClassGenerator {
       }
     }
 
-    // 降级到原有逻辑
-    const parts = baseClass.split('-');
-    if (parts.length === 2) {
+    // 降级到原有逻辑：支持首个 - 分割，允许 value 包含 -
+    // 例如：bg-hex-fff -> ['bg', 'hex-fff']
+    const firstDashIndex = baseClass.indexOf('-');
+    if (firstDashIndex > 0 && firstDashIndex < baseClass.length - 1) {
+      const prefix = baseClass.substring(0, firstDashIndex);
+      const value = baseClass.substring(firstDashIndex + 1);
       this.eventBus.emit('generator:dynamic:prefix_matched', {
         className,
-        prefix: parts[0],
-        value: parts[1],
+        prefix,
+        value,
         variant,
-        method: 'fallback_split',
+        method: 'fallback_first_dash_split',
       });
-      return [parts[0], parts[1], variant]; // 返回包含 variant 的三元组
+      return [prefix, value, variant]; // 返回包含 variant 的三元组
     }
 
     this.eventBus.emit('generator:dynamic:parse_failed', {
@@ -392,13 +395,27 @@ class DynamicClassGenerator {
           const cssValue = isImportant ? `${value} !important` : value;
           // 使用格式化器格式化CSS
           cssRule = this.cssFormatter.formatRule(originalClassName, `${cssClassName}: ${cssValue}`);
-        } else if (this.isObject(baseClassItem[1]) && baseClassItem[1][value] !== undefined) {
-          const cssValue = isImportant
-            ? `${baseClassItem[1][value]} !important`
-            : baseClassItem[1][value];
-          const propertyName = baseClassItem[1]['ABBR'] || cssClassName;
-          // 使用格式化器格式化CSS
-          cssRule = this.cssFormatter.formatRule(originalClassName, `${propertyName}: ${cssValue}`);
+        } else if (this.isObject(baseClassItem[1])) {
+          // 优先使用映射值（如果存在）
+          if (baseClassItem[1][value] !== undefined) {
+            const cssValue = isImportant
+              ? `${baseClassItem[1][value]} !important`
+              : baseClassItem[1][value];
+            const propertyName = baseClassItem[1]['ABBR'] || cssClassName;
+            // 使用格式化器格式化CSS
+            cssRule = this.cssFormatter.formatRule(originalClassName, `${propertyName}: ${cssValue}`);
+          } else if (baseClassItem[1]['ABBR']) {
+            // 映射不存在，但有 ABBR，尝试解析为直接颜色值
+            const parsedColor = this.parseColorValue(value);
+            if (parsedColor) {
+              const cssValue = isImportant
+                ? `${parsedColor} !important`
+                : parsedColor;
+              const propertyName = baseClassItem[1]['ABBR'];
+              // 使用格式化器格式化CSS
+              cssRule = this.cssFormatter.formatRule(originalClassName, `${propertyName}: ${cssValue}`);
+            }
+          }
         }
 
         // 如果有响应式变体，用 @media 包裹
@@ -436,6 +453,90 @@ class DynamicClassGenerator {
 
   isArray(obj) {
     return Object.prototype.toString.call(obj) === '[object Array]';
+  }
+
+  // 解析颜色值（支持 hex、rgb、rgba）
+  // 返回解析后的 CSS 颜色值字符串，失败返回 null
+  parseColorValue(value) {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+
+    // Hex 格式：hex-fff, hex-112233, hex-ffffffff
+    if (value.startsWith('hex-')) {
+      const hexValue = value.substring(4);
+      // 验证 hex 值：3、4、6、8 位十六进制数字
+      if (/^[0-9a-fA-F]{3}$/.test(hexValue)) {
+        return `#${hexValue}`;
+      }
+      if (/^[0-9a-fA-F]{4}$/.test(hexValue)) {
+        return `#${hexValue}`;
+      }
+      if (/^[0-9a-fA-F]{6}$/.test(hexValue)) {
+        return `#${hexValue}`;
+      }
+      if (/^[0-9a-fA-F]{8}$/.test(hexValue)) {
+        return `#${hexValue}`;
+      }
+      return null;
+    }
+
+    // RGB 格式：rgb-255-0-0
+    if (value.startsWith('rgb-')) {
+      const parts = value.substring(4).split('-');
+      if (parts.length === 3) {
+        const r = parseInt(parts[0], 10);
+        const g = parseInt(parts[1], 10);
+        const b = parseInt(parts[2], 10);
+        if (
+          !isNaN(r) && r >= 0 && r <= 255 &&
+          !isNaN(g) && g >= 0 && g <= 255 &&
+          !isNaN(b) && b >= 0 && b <= 255
+        ) {
+          return `rgb(${r}, ${g}, ${b})`;
+        }
+      }
+      return null;
+    }
+
+    // RGBA 格式：rgba-255-0-0-05 或 rgba-255-0-0-0_5
+    if (value.startsWith('rgba-')) {
+      const parts = value.substring(5).split('-');
+      if (parts.length === 4) {
+        const r = parseInt(parts[0], 10);
+        const g = parseInt(parts[1], 10);
+        const b = parseInt(parts[2], 10);
+        // 解析 alpha：支持 05 (0.5) 或 0_5 (0.5) 格式
+        let alpha = parts[3];
+        let alphaNum;
+        
+        // 如果包含下划线，替换为点
+        if (alpha.includes('_')) {
+          alpha = alpha.replace('_', '.');
+          alphaNum = parseFloat(alpha);
+        } else if (/^\d{2}$/.test(alpha) && alpha.length === 2) {
+          // 两位数字格式：
+          // - 如果 < 10（如 05, 08），除以 10 得到 0.5, 0.8
+          // - 如果 >= 10（如 50, 99），除以 100 得到 0.5, 0.99（作为百分比）
+          const num = parseInt(alpha, 10);
+          alphaNum = num < 10 ? num / 10 : num / 100;
+        } else {
+          // 其他格式（如 0.5, 1 等）直接解析
+          alphaNum = parseFloat(alpha);
+        }
+        if (
+          !isNaN(r) && r >= 0 && r <= 255 &&
+          !isNaN(g) && g >= 0 && g <= 255 &&
+          !isNaN(b) && b >= 0 && b <= 255 &&
+          !isNaN(alphaNum) && alphaNum >= 0 && alphaNum <= 1
+        ) {
+          return `rgba(${r}, ${g}, ${b}, ${alphaNum})`;
+        }
+      }
+      return null;
+    }
+
+    return null;
   }
 
   // 验证CSS生成结果

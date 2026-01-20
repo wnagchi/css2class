@@ -209,6 +209,78 @@
 
 </details>
 
+### 直接颜色值写法（无需配置）
+
+除了使用预设的颜色映射（如 `bg-red`、`color-white`），现在支持直接在 class 中写入颜色值。该功能适用于所有带 `ABBR` 的颜色族（`bg`、`color`、`bcolor` 等）。
+
+#### Hex 颜色格式
+
+```html
+<!-- 3位 hex -->
+<div class="bg-hex-fff">白色背景</div>
+<div class="color-hex-000">黑色文字</div>
+
+<!-- 4位 hex（含 alpha） -->
+<div class="bg-hex-ffff">不透明白色背景</div>
+
+<!-- 6位 hex -->
+<div class="bg-hex-112233">深色背景</div>
+<div class="color-hex-ff0000">红色文字</div>
+
+<!-- 8位 hex（含 alpha） -->
+<div class="bg-hex-ffffffff">完全不透明白色背景</div>
+```
+
+#### RGB 颜色格式
+
+```html
+<div class="bg-rgb-255-0-0">红色背景</div>
+<div class="color-rgb-0-128-255">蓝色文字</div>
+```
+
+#### RGBA 颜色格式
+
+```html
+<!-- alpha 值支持多种写法：
+     - 两位数字 < 10：除以 10（如 05 → 0.5, 08 → 0.8）
+     - 两位数字 >= 10：除以 100 作为百分比（如 50 → 0.5, 99 → 0.99）
+     - 下划线分隔：直接替换为点（如 0_5 → 0.5）
+     - 其他格式：直接解析（如 1 → 1.0, 0.5 → 0.5）
+-->
+<div class="bg-rgba-0-0-0-05">半透明黑色背景（05 → 0.5）</div>
+<div class="bg-rgba-255-0-0-0_5">半透明红色背景（0_5 → 0.5）</div>
+<div class="bg-rgba-0-0-0-50">50% 不透明度黑色背景（50 → 0.5）</div>
+<div class="color-rgba-0-0-0-08">80% 不透明度黑色文字（08 → 0.8）</div>
+<div class="bg-rgba-255-0-0-99">99% 不透明度红色背景（99 → 0.99）</div>
+```
+
+#### 与响应式和 Important 组合使用
+
+```html
+<!-- 响应式变体 -->
+<div class="sm:bg-hex-fff md:bg-rgb-255-0-0">响应式背景色</div>
+
+<!-- Important 标识 -->
+<div class="bg-hex-fff_i">强制白色背景</div>
+<div class="!color-rgb-0-0-0">强制黑色文字</div>
+
+<!-- 组合使用 -->
+<div class="sm:bg-rgba-255-0-0-05_i">响应式 + Important</div>
+```
+
+:::tip 优先级说明
+- **映射优先**：如果配置中存在对应的颜色映射（如 `bg-red`），优先使用映射值
+- **直接值后备**：只有当映射不存在时，才会尝试解析为直接颜色值
+- **解析失败**：如果既不是映射值，也无法解析为有效颜色值，则不会生成 CSS 规则
+:::
+
+:::warning 兼容性
+- ✅ 完全兼容 Web（HTML/CSS）
+- ✅ 完全兼容小程序（WXML/WXSS）
+- ✅ 只使用字母、数字、下划线、短横线，无需转义
+- ✅ 与现有颜色映射方案完全兼容，不会产生冲突
+:::
+
 ---
 
 ## 布局 / 显示（静态类）
