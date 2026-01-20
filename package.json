@@ -7,9 +7,9 @@
     "class2css": "./bin/class2css.js"
   },
   "scripts": {
-    "start": "node bin/class2css.js --docs",
-    "build": "node bin/class2css.js --no-watch",
-    "dev": "node bin/class2css.js --config ./class2css.config.js",
+    "start": "node bin/class2css.js --docs --config ./examples/weapp/class2css.config.js",
+    "build": "node bin/class2css.js --no-watch --config ./examples/weapp/class2css.config.js",
+    "dev": "node bin/class2css.js --config ./examples/weapp/class2css.config.js",
     "docs:dev": "vitepress dev docs",
     "test": "node src/example.js",
     "help": "node bin/class2css.js --help",

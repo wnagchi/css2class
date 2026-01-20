@@ -49,68 +49,19 @@ npm run version
 
 ### 基础配置
 
-在项目根目录创建 `class2css.config.js`：
+推荐直接复制示例配置（可运行）：
 
-```javascript
-module.exports = {
-  // ========== 系统基础配置 ==========
-  system: {
-    // CSS 输出格式: 'multiLine' | 'singleLine' | 'compressed'
-    cssFormat: "compressed",
-    // 基础单位设置
-    baseUnit: "rpx",
-    // 单位转换比例 生成样式单位=设置单位*比例
-    unitConversion: 2,
-    // 是否压缩CSS
-    compression: true,
-    // 是否对生成的CSS类进行字母排序（按选择器名称）
-    sortClasses: true,
-    // 智能单位处理策略
-    unitStrategy: {
-      // 自动检测：如果用户写了单位，保持原单位；如果没写，使用默认单位
-      autoDetect: true,
-      // 属性默认单位映射
-      propertyUnits: {
-        'font-size': 'rpx',
-        'width|height': 'rpx', 
-        'opacity': '',           // 无单位
-        'z-index': '',          // 无单位
-        'line-height': '',      // 可以无单位
-        'border-radius': 'rpx'
-      }
-    }
-  },
+- **小程序（wxss / rpx）**：`examples/weapp/class2css.config.js` + `examples/weapp/styles.config.js`
+- **Web（css / px）**：`examples/web/class2css.config.js` + `examples/web/styles.config.js`
 
-  // ========== 输出配置 ==========
-  output: {
-    path: "../dist",
-    fileName: "styles.wxss"
-  },
+你可以直接用 `-c` 指定配置启动（不需要改默认文件名）：
 
-  // ========== CSS类映射 ==========
-  cssName: {
-    // 间距
-    "m": { classArr: ["margin"], unit: "rpx" },
-    "mt": { classArr: ["margin-top"], unit: "rpx" },
-    "mr": { classArr: ["margin-right"], unit: "rpx" },
-    "mb": { classArr: ["margin-bottom"], unit: "rpx" },
-    "ml": { classArr: ["margin-left"], unit: "rpx" },
-    
-    // 字体大小
-    "text": { classArr: ["font-size"], unit: "rpx" },
-    
-    // 宽高
-    "w": { classArr: ["width"], unit: "rpx" },
-    "h": { classArr: ["height"], unit: "rpx" }
-  },
+```bash
+# 小程序示例
+class2css -c ./examples/weapp/class2css.config.js
 
-  // ========== 静态类配置 ==========
-  baseClassName: {
-    "container": "max-width: 1200rpx; margin: 0 auto;",
-    "flex": "display: flex;",
-    "flex-center": "display: flex; justify-content: center; align-items: center;"
-  }
-};
+# Web 示例
+class2css -c ./examples/web/class2css.config.js
 ```
 
 ## 📖 配置指南

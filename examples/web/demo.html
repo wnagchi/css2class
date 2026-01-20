@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>css2class Web Demo</title>
+    <!-- 由 class2css 生成：examples/web/dist/styles.css -->
+    <link rel="stylesheet" href="./dist/styles.css" />
+    <style>
+      /* 仅用于 demo 的基础页面样式（与工具无关） */
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: #f6f7fb;
+        margin: 0;
+      }
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        border: 1px solid #e6e8f0;
+        border-radius: 999px;
+      }
+      .muted {
+        color: #667085;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card p-24">
+        <div class="row items-center justify-between">
+          <div>
+            <div class="text-20 font-700">css2class - Web 示例页面</div>
+            <div class="text-14 muted mt-8">
+              这个页面里的 class 会被工具扫描并生成到 <code>dist/styles.css</code>，打开页面即可看到效果。
+            </div>
+          </div>
+          <div class="row">
+            <div class="chip px-12 py-8 text-14">m / p</div>
+            <div class="chip px-12 py-8 text-14">w / h</div>
+            <div class="chip px-12 py-8 text-14">rounded / border</div>
+          </div>
+        </div>
+
+        <div class="mt-24">
+          <div class="text-16 font-600 mb-12">间距（spacing）</div>
+          <div class="row">
+            <div class="p-12 bg-sky color-white rounded-12">p-12</div>
+            <div class="p-16 bg-violet color-white rounded-12">p-16</div>
+            <div class="p-20 bg-green color-white rounded-12">p-20</div>
+          </div>
+        </div>
+
+        <div class="mt-24">
+          <div class="text-16 font-600 mb-12">尺寸（sizing）</div>
+          <div class="row">
+            <div class="w-120 h-60 bg-gray rounded-12"></div>
+            <div class="w-160 h-60 bg-gray rounded-12"></div>
+            <div class="w-200 h-60 bg-gray rounded-12"></div>
+            <div class="w-full h-60 bg-gray rounded-12"></div>
+          </div>
+        </div>
+
+        <div class="mt-24">
+          <div class="text-16 font-600 mb-12">文字（typography）</div>
+          <div class="text-12 muted">text-12</div>
+          <div class="text-14 mt-8">text-14</div>
+          <div class="text-18 mt-8 font-700">text-18 font-700</div>
+        </div>
+
+        <div class="mt-24">
+          <div class="text-16 font-600 mb-12">颜色族（color / bg / bcolor）</div>
+          <div class="row">
+            <div class="px-16 py-12 bg-red color-white rounded-12">bg-red + color-white</div>
+            <div class="px-16 py-12 bg-black color-white rounded-12">bg-black + color-white</div>
+            <div class="px-16 py-12 bg-transparent bcolor-gray border-1 rounded-12">
+              bg-transparent + bcolor-gray + border-1
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-16 muted text-12">
+        提示：修改本文件里的 class 后，重新运行/保持运行 class2css，即可看到 CSS 更新。
+      </div>
+    </div>
+  </body>
+</html>

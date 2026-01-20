@@ -51,8 +51,12 @@ class ClassParser {
           // 智能类名预处理和验证（使用 base class 进行分析）
           const processedClass = this.preprocessClassName(className, cleanName);
 
+          const isStaticHit = this.userStaticClassSet.has(baseClass);
+          // 如果命中静态类定义，则不再把它当成动态类候选，避免同一 selector 重复生成两份规则
+          const isDynamicCandidate = baseClass.includes('-') && !isStaticHit;
+
           // 先检查是否是静态类（使用 base class 检查）
-          if (this.userStaticClassSet.has(baseClass)) {
+          if (isStaticHit) {
             userStaticList.add(processedClass.original); // 保存原始 class 名（如 sm:flex）
             this.eventBus.emit('parser:static:found', {
               className: processedClass.original,
@@ -63,7 +67,7 @@ class ClassParser {
           }
 
           // 再检查是否是动态类（使用 base class 检查）
-          if (baseClass.includes('-')) {
+          if (isDynamicCandidate) {
             classList.add(processedClass.original); // 保存原始 class 名（如 sm:w-100）
             this.eventBus.emit('parser:dynamic:found', {
               className: processedClass.original,

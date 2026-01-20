@@ -1,6 +1,11 @@
 # 配置模板（可复制）
 
-本页把仓库里的 `class2css.config.js`（你现在已经跑通、并且覆盖了当前支持能力）整理成一份**可直接复制**的模板，避免开发者每个项目都从零拼配置。
+本仓库内置两套**可直接复制**的示例配置，避免每个项目都从零拼配置：
+
+- **小程序（wxss / rpx）**：`examples/weapp/`
+- **Web（css / px）**：`examples/web/`
+
+你可以直接复制对应目录里的 `class2css.config.js` + `styles.config.js` 到你的项目里使用（也可以用 `-c` 指定示例配置路径运行）。
 
 :::tip 配置结构说明
 配置已拆分为两个文件：
@@ -15,6 +20,16 @@
 - `multiFile.entry.path`：要扫描/监听的源码目录（也支持写成数组，用于多目录/多文件入口）
 - `multiFile.output.path` / `multiFile.output.fileName`：统一输出文件位置（`cssOutType='uniFile'` 时）
 :::
+
+## Web 场景配置差异（对照）
+
+如果你是 Web 项目（输出 css / 默认 px），主要差异在：
+
+- `system.baseUnit: 'px'`
+- `system.unitConversion: 1`
+- `multiFile.entry.fileType: ['html', 'vue']`（按你项目模板扩展名调整）
+- `multiFile.output.fileName: 'styles.css'`
+- `multiFile.output.fileType: 'css'`（仅 `cssOutType='filePath'` 时生效）
 
 ## 工具配置文件（class2css.config.js）
 

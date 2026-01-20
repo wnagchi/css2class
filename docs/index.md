@@ -34,18 +34,17 @@ features:
 npm install css2class --save-dev
 ```
 
-创建 `class2css.config.js`（最小可用示例）：
+复制示例配置（推荐）：
 
-```js
-module.exports = {
-  system: { baseUnit: 'rpx', unitConversion: 2, cssFormat: 'compressed' },
-  output: { path: '../dist', fileName: 'styles.wxss' },
-  cssName: {
-    m: { classArr: ['margin'], unit: 'rpx' },
-    w: { classArr: ['width'], unit: 'rpx' },
-    h: { classArr: ['height'], unit: 'rpx' },
-  },
-};
+- **小程序（wxss / rpx）**：`examples/weapp/class2css.config.js` + `examples/weapp/styles.config.js`
+- **Web（css / px）**：`examples/web/class2css.config.js` + `examples/web/styles.config.js`
+
+你可以直接用 `-c` 指定示例配置启动：
+
+```bash
+class2css -c ./examples/weapp/class2css.config.js
+# 或
+class2css -c ./examples/web/class2css.config.js
 ```
 
 启动（监听模式）：

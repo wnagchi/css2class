@@ -13,19 +13,14 @@ Class2CSS 通过 `class2css.config.js` 文件进行配置。配置文件支持�
 
 可以通过 CLI 参数 `-c, --config` 指定自定义路径。
 
-## 最小配置（可运行）
+## 最小配置（推荐做法）
 
-```js
-module.exports = {
-  system: { baseUnit: 'rpx', unitConversion: 2, cssFormat: 'compressed' },
-  output: { path: '../dist', fileName: 'styles.wxss' },
-  cssName: {
-    m: { classArr: ['margin'], unit: 'rpx' },
-    w: { classArr: ['width'], unit: 'rpx' },
-    h: { classArr: ['height'], unit: 'rpx' },
-  },
-};
-```
+当前版本建议直接从示例配置改起（更完整、并且与运行时校验一致）：
+
+- **小程序（wxss / rpx）**：`examples/weapp/class2css.config.js` + `examples/weapp/styles.config.js`
+- **Web（css / px）**：`examples/web/class2css.config.js` + `examples/web/styles.config.js`
+
+你可以先用 `-c` 跑起来，再逐步改 `multiFile.entry.path` / `multiFile.output`。
 
 ## 配置结构
 
@@ -34,68 +29,53 @@ module.exports = {
 新版本引入了 `system` 配置节，提供更强大的功能：
 
 ```javascript
+// 推荐把“规则”拆到 styles.config.js，然后在主配置里引入，便于复用/维护
+const stylesConfig = require('./styles.config.js');
+
 module.exports = {
-  // ========== 系统基础配置 ==========
   system: {
-    // CSS 输出格式: 'multiLine' | 'singleLine' | 'compressed'
-    cssFormat: "compressed",
-    // 基础单位设置
-    baseUnit: "rpx",
-    // 单位转换比例 生成样式单位=设置单位*比例
+    cssFormat: 'compressed',
+    baseUnit: 'rpx',
     unitConversion: 2,
-    // 是否压缩CSS
     compression: true,
-    // 是否对生成的CSS类进行字母排序（按选择器名称）
     sortClasses: true,
-    // 智能单位处理策略
     unitStrategy: {
       autoDetect: true,
       propertyUnits: {
         'font-size': 'rpx',
         'width|height': 'rpx',
-        'opacity': '',
+        opacity: '',
         'z-index': '',
         'line-height': '',
-        'border-radius': 'rpx'
-      }
-    }
+        'border-radius': 'rpx',
+      },
+    },
   },
 
-  // ========== 输出配置 ==========
-  output: {
-    path: "../dist",
-    fileName: "styles.wxss"
+  // 单文件输出（非 multiFile 时使用；当前版本运行时通常会走 multiFile）
+  output: { path: './dist', fileName: 'styles.wxss' },
+
+  importantFlags: stylesConfig.importantFlags,
+
+  // 多文件扫描/监听入口 + 输出策略（当前版本推荐）
+  multiFile: {
+    entry: { path: './src', fileType: ['wxml', 'html'] },
+    output: { cssOutType: 'uniFile', path: './dist', fileName: 'styles.wxss', fileType: 'wxss' },
   },
 
-  // ========== CSS类映射 ==========
-  cssName: {
-    "m": { classArr: ["margin"], unit: "rpx" },
-    "w": { classArr: ["width"], unit: "rpx" },
-    "h": { classArr: ["height"], unit: "rpx" }
-  },
-
-  // ========== 静态类配置 ==========
-  baseClassName: {
-    "container": "max-width: 1200rpx; margin: 0 auto;",
-    "flex": "display: flex;"
-  }
+  // 规则（来自 styles.config.js）
+  atomicRules: stylesConfig.atomicRules,
+  baseClassName: stylesConfig.baseClassName,
+  variants: stylesConfig.variants,
+  breakpoints: stylesConfig.breakpoints,
 };
 ```
 
-### 向后兼容
+### 兼容与迁移
 
-工具完全兼容旧版配置格式：
+历史版本里常见的是 `cssName` / `baseClassName` 的配置方式；当前版本推荐以 `atomicRules` / `baseClassName` 为主，并把规则拆到 `styles.config.js` 便于维护。
 
-```javascript
-// 旧版配置仍然有效
-module.exports = {
-  baseUnit: "rpx",           // 自动映射到 system.baseUnit
-  unitConversion: 2,         // 自动映射到 system.unitConversion
-  output: { /* ... */ },
-  cssName: { /* ... */ },
-  baseClassName: { /* ... */ }
-};
-```
+如果你是从旧配置升级，建议直接对照示例配置做迁移（或参考仓库根目录的 `MIGRATION.md`）。
 
 ## 配置项说明
 
@@ -163,16 +143,20 @@ unitStrategy: {
 
 公共基础样式文件路径（如果你希望每次输出都带上一段统一的基础 CSS）。
 
-### cssName 配置
+### atomicRules 配置（动态规则）
 
-CSS类映射，定义类名到CSS属性的映射关系：
+推荐使用 `atomicRules` 描述“动态类 → CSS 属性”的规则（当前版本运行时会从 `atomicRules` 构建内部映射）。
 
 ```javascript
-cssName: {
-  "m": { classArr: ["margin"], unit: "rpx" },
-  "mt": { classArr: ["margin-top"], unit: "rpx" },
-  "w": { classArr: ["width"], unit: "rpx" },
-  "h": { classArr: ["height"], unit: "rpx" }
+atomicRules: {
+  spacing: {
+    m: { properties: ["margin"], defaultUnit: "rpx" },
+    mt: { properties: ["margin-top"], defaultUnit: "rpx" }
+  },
+  sizing: {
+    w: { properties: ["width"], defaultUnit: "rpx" },
+    h: { properties: ["height"], defaultUnit: "rpx" }
+  }
 }
 ```
 
@@ -243,14 +227,17 @@ module.exports = {
 };
 
 // class2css.config.js
-const spacing = require('./configs/spacing.config');
+const stylesConfig = require('./styles.config.js');
+const spacingRules = require('./configs/spacing.config');
 
 module.exports = {
   system: { /* ... */ },
-  cssName: {
-    ...spacing.margin,
-    // 其他配置
-  }
+  atomicRules: {
+    ...stylesConfig.atomicRules,
+    // 把你拆出来的规则合并进去（按类别合并）
+    ...spacingRules,
+  },
+  baseClassName: stylesConfig.baseClassName,
 };
 ```
 

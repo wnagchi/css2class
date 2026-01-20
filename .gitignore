@@ -95,6 +95,10 @@ docs/.vitepress/.temp/
 # User config files
 user.config.json
 
+# Local tool config (project-specific, do not commit)
+/class2css.config.js
+/styles.config.js
+
 # Update summary (internal use)
 .update-summary.md
 

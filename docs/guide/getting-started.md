@@ -38,27 +38,26 @@ npm run help
 npm run version
 ```
 
-## 创建最小配置
+## 复制示例配置（推荐）
 
-在项目根目录创建 `class2css.config.js`：
+本项目的配置项较多（并且当前版本运行时依赖 `multiFile`、`atomicRules` 等字段），**不建议从零手写**。
 
-```javascript
-module.exports = {
-  system: { baseUnit: 'rpx', unitConversion: 2, cssFormat: 'compressed' },
-  output: {
-    path: '../dist',
-    fileName: 'styles.wxss',
-  },
-  cssName: {
-    m: { classArr: ['margin'], unit: 'rpx' },
-    w: { classArr: ['width'], unit: 'rpx' },
-    h: { classArr: ['height'], unit: 'rpx' },
-  },
-};
-```
+直接从仓库内置示例复制即可：
+
+- **小程序（wxss / rpx）**：复制 `examples/weapp/` 下的 `class2css.config.js` + `styles.config.js`
+- **Web（css / px）**：复制 `examples/web/` 下的 `class2css.config.js` + `styles.config.js`
+
+复制后你有两种启动方式：
+
+- **方式 A（推荐）**：用 `-c` 指定示例配置（不需要改默认文件名）
+  - `class2css -c ./examples/weapp/class2css.config.js`
+  - `class2css -c ./examples/web/class2css.config.js`
+- **方式 B**：把示例配置放到项目根目录并改名为默认配置文件
+  - `class2css.config.js`
+  - `styles.config.js`
 
 :::tip 下一步
-把配置写“可维护”，并开启单位策略/排序/诊断等能力：建议直接阅读 [配置指南](./config.md) 并从示例配置改起。
+示例配置里把路径/输出都写成相对路径了，你只需要改 `multiFile.entry.path`（扫描/监听入口）和 `multiFile.output`（输出位置/文件名）即可跑通。
 :::
 
 ## 使用类名
