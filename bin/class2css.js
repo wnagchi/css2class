@@ -11,6 +11,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     config: './class2css.config.js',
+    configProvided: false,
     watch: true,
     help: false,
     version: false,
@@ -32,6 +33,7 @@ function parseArgs() {
       case '--config':
       case '-c':
         options.config = args[++i];
+        options.configProvided = true;
         break;
       case '--no-watch':
         options.watch = false;
@@ -161,11 +163,37 @@ function showVersion() {
 }
 
 // 检查配置文件是否存在
-function checkConfig(configPath) {
+function checkConfig(configPath, configProvided) {
   const absolutePath = path.resolve(configPath);
   if (!fs.existsSync(absolutePath)) {
-    console.error(`Configuration file not found: ${absolutePath}`);
-    console.error('Please create a class2css.config.js file or specify a valid config path.');
+    const isDefaultConfig =
+      !configProvided && path.resolve('./class2css.config.js') === absolutePath;
+
+    console.error(`配置文件不存在：${absolutePath}`);
+
+    if (isDefaultConfig) {
+      console.error(`
+首次运行提示：
+- 你当前没有在项目根目录找到默认配置：./class2css.config.js
+
+你可以选择以下任意一种方式启动：
+1) 直接运行内置示例（无需复制配置）：
+   - npm run example:weapp
+   - npm run example:web
+
+2) 直接指定示例配置运行：
+   - node bin/class2css.js --config ./examples/weapp/class2css.config.js
+   - node bin/class2css.js --config ./examples/web/class2css.config.js
+
+3) 复制示例配置到项目根目录（推荐用于你自己的项目）：
+   - 复制 ./examples/weapp/class2css.config.js  ->  ./class2css.config.js
+   - 复制 ./examples/weapp/styles.config.js    ->  ./styles.config.js
+   （或者选择 web 示例同路径）
+`);
+    } else {
+      console.error('请创建 class2css.config.js，或使用 -c/--config 指定有效配置文件路径。');
+    }
+
     process.exit(1);
   }
   return absolutePath;
@@ -238,7 +266,7 @@ async function main() {
     }
 
     // 检查配置文件
-    const configPath = checkConfig(options.config);
+    const configPath = checkConfig(options.config, options.configProvided);
 
     console.log('🚀 Starting Class2CSS...');
     console.log(`📁 Config: ${configPath}`);

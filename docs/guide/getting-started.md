@@ -17,11 +17,15 @@ npm install css2class --save-dev
 ### 监听模式（开发）
 
 ```bash
-# 启动工具（默认监听模式）
+# 启动工具（默认监听模式；默认使用根目录配置：./class2css.config.js）
 npm run start
 
-# 开发模式（文件监听）
+# 开发模式（文件监听；默认使用根目录配置：./class2css.config.js）
 npm run dev
+
+# 或者显式运行内置示例（推荐）
+npm run example:weapp
+npm run example:web
 ```
 
 ### 单次构建（CI/构建）

@@ -50,7 +50,9 @@ class2css -c ./examples/web/class2css.config.js
 启动（监听模式）：
 
 ```bash
-npm run start
+npm run start            # 默认使用根目录配置：./class2css.config.js
+npm run example:web      # 显式跑 web 示例
+npm run example:weapp    # 显式跑 weapp 示例
 ```
 
 在模板里使用类名：

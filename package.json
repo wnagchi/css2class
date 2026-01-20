@@ -7,9 +7,14 @@
     "class2css": "./bin/class2css.js"
   },
   "scripts": {
-    "start": "node bin/class2css.js --docs --config ./examples/weapp/class2css.config.js",
-    "build": "node bin/class2css.js --no-watch --config ./examples/weapp/class2css.config.js",
-    "dev": "node bin/class2css.js --config ./examples/weapp/class2css.config.js",
+    "start": "node bin/class2css.js --docs",
+    "dev": "node bin/class2css.js",
+    "build": "node bin/class2css.js --no-watch",
+    "example:weapp": "node bin/class2css.js --config ./examples/weapp/class2css.config.js",
+    "example:weapp:build": "node bin/class2css.js --no-watch --config ./examples/weapp/class2css.config.js",
+    "example:weapp:docs": "node bin/class2css.js --docs --config ./examples/weapp/class2css.config.js",
+    "example:web": "node bin/class2css.js --config ./examples/web/class2css.config.js",
+    "example:web:build": "node bin/class2css.js --no-watch --config ./examples/web/class2css.config.js",
     "docs:dev": "vitepress dev docs",
     "test": "node src/example.js",
     "help": "node bin/class2css.js --help",

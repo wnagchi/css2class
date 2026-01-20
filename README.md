@@ -33,14 +33,25 @@ npm install css2class --save-dev
 ### 基本使用
 
 ```bash
-# 启动工具
+# 启动工具（默认使用根目录配置：./class2css.config.js）
 npm run start
 
-# 开发模式（文件监听）
+# 开发模式（文件监听；默认使用根目录配置：./class2css.config.js）
 npm run dev
 
-# 构建模式（单次扫描后退出，不监听）
+# 构建模式（单次扫描后退出，不监听；默认使用根目录配置：./class2css.config.js）
 npm run build
+
+# 运行内置示例（推荐：显式指定）
+npm run example:weapp
+npm run example:web
+
+# 单次构建内置示例
+npm run example:weapp:build
+npm run example:web:build
+
+# 可选：启动 weapp 示例 + docs
+npm run example:weapp:docs
 
 # 查看帮助/版本
 npm run help
