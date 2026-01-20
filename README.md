@@ -27,7 +27,7 @@
 ### 安装
 
 ```bash
-npm install class2css --save-dev
+npm install css2class --save-dev
 ```
 
 ### 基本使用

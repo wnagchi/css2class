@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-npm install class2css --save-dev
+npm install css2class --save-dev
 ```
 
 :::tip 推荐

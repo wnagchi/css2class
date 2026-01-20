@@ -31,7 +31,7 @@ features:
 安装：
 
 ```bash
-npm install class2css --save-dev
+npm install css2class --save-dev
 ```
 
 创建 `class2css.config.js`（最小可用示例）：
