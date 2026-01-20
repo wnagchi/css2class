@@ -25,7 +25,8 @@ class FullScanManager {
   // 全量扫描所有文件
   async performFullScan(watchPath, fileTypes, classParser, cacheManager, preserveBaseline = true) {
     try {
-      this.eventBus.emit('fullScan:started', { watchPath, fileTypes });
+      const watchPaths = Array.isArray(watchPath) ? watchPath : [watchPath];
+      this.eventBus.emit('fullScan:started', { watchPath: watchPaths, fileTypes });
 
       // 清空现有数据
       if (preserveBaseline) {
@@ -59,8 +60,8 @@ class FullScanManager {
         this.baselineStaticClassSet.clear();
       }
 
-      // 扫描所有文件
-      const files = await this.scanDirectory(watchPath, fileTypes);
+      // 扫描所有文件（支持多目录/多文件）
+      const files = await this.scanTargets(watchPaths, fileTypes);
       this.eventBus.emit('fullScan:filesFound', { count: files.length, files });
 
       let processedCount = 0;
@@ -109,9 +110,18 @@ class FullScanManager {
     }
   }
 
-  // 扫描目录获取所有匹配的文件
-  async scanDirectory(watchPath, fileTypes) {
+  // 扫描多个入口（目录/文件）获取所有匹配的文件
+  async scanTargets(targetPaths, fileTypes) {
     const files = [];
+    const seen = new Set();
+
+    const addFile = (fp) => {
+      const norm = path.normalize(fp);
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        files.push(norm);
+      }
+    };
 
     const scanDir = async (dirPath) => {
       try {
@@ -125,7 +135,7 @@ class FullScanManager {
           } else if (entry.isFile()) {
             const ext = path.extname(entry.name).slice(1).toLowerCase();
             if (fileTypes.includes(ext)) {
-              files.push(fullPath);
+              addFile(fullPath);
             }
           }
         }
@@ -134,7 +144,23 @@ class FullScanManager {
       }
     };
 
-    await scanDir(watchPath);
+    for (const target of targetPaths.filter(Boolean)) {
+      try {
+        const stat = await fs.stat(target);
+        if (stat.isDirectory()) {
+          await scanDir(target);
+        } else if (stat.isFile()) {
+          const ext = path.extname(target).slice(1).toLowerCase();
+          if (fileTypes.includes(ext)) {
+            addFile(target);
+          }
+        }
+      } catch (error) {
+        // 入口不存在/不可访问：记录但不中断
+        this.eventBus.emit('fullScan:dirError', { dirPath: target, error: error.message });
+      }
+    }
+
     return files;
   }
 

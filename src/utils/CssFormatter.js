@@ -3,6 +3,19 @@ class CssFormatter {
     this.format = format;
   }
 
+  // 转义 CSS 选择器中的特殊字符
+  // 确保生成的 CSS 选择器能正确匹配 HTML/WXML 中的 class 名
+  escapeSelector(selector) {
+    if (!selector || typeof selector !== 'string') {
+      return selector;
+    }
+
+    // 转义特殊字符：冒号、感叹号、空格、斜杠等
+    // CSS 选择器中需要转义的字符：: ! / \ 空格等
+    // 使用反斜杠转义，例如 sm:w-100 -> sm\:w-100
+    return selector.replace(/([:!\/\\\s])/g, '\\$1');
+  }
+
   // 设置格式
   setFormat(format) {
     if (['multiLine', 'singleLine', 'compressed'].includes(format)) {
@@ -32,9 +45,12 @@ class CssFormatter {
 
   // 多行格式（默认）
   formatRuleMultiLine(selector, properties) {
+    // 转义选择器中的特殊字符
+    const escapedSelector = this.escapeSelector(selector);
+    
     if (Array.isArray(properties)) {
       // 属性数组格式：[{property: 'margin', value: '10rpx'}, ...]
-      let css = `\n.${selector} {\n`;
+      let css = `\n.${escapedSelector} {\n`;
       properties.forEach(({ property, value }) => {
         css += `  ${property}: ${value};\n`;
       });
@@ -42,30 +58,36 @@ class CssFormatter {
       return css;
     } else if (typeof properties === 'string') {
       // 字符串格式：'margin: 10rpx;'
-      return `\n.${selector} {\n  ${properties}\n}\n`;
+      return `\n.${escapedSelector} {\n  ${properties}\n}\n`;
     }
     return '';
   }
 
   // 单行格式
   formatRuleSingleLine(selector, properties) {
+    // 转义选择器中的特殊字符
+    const escapedSelector = this.escapeSelector(selector);
+    
     if (Array.isArray(properties)) {
       // 属性数组格式
       const propsStr = properties.map(({ property, value }) => `${property}: ${value}`).join('; ');
-      return `.${selector} { ${propsStr}; }\n`;
+      return `.${escapedSelector} { ${propsStr}; }\n`;
     } else if (typeof properties === 'string') {
       // 字符串格式
-      return `.${selector} { ${properties}; }\n`;
+      return `.${escapedSelector} { ${properties}; }\n`;
     }
     return '';
   }
 
   // 压缩格式
   formatRuleCompressed(selector, properties) {
+    // 转义选择器中的特殊字符
+    const escapedSelector = this.escapeSelector(selector);
+    
     if (Array.isArray(properties)) {
       // 属性数组格式
       const propsStr = properties.map(({ property, value }) => `${property}:${value}`).join(';');
-      return `.${selector}{${propsStr}}`;
+      return `.${escapedSelector}{${propsStr}}`;
     } else if (typeof properties === 'string') {
       // 字符串格式，移除空格但保留分号（除了最后一个分号）
       let cleanProps = properties.replace(/\s+/g, ''); // 移除所有空格
@@ -73,7 +95,7 @@ class CssFormatter {
       cleanProps = cleanProps.replace(/;+$/, ''); // 移除末尾的分号
       // 确保分号后面没有空格（虽然已经移除了空格，但为了安全）
       cleanProps = cleanProps.replace(/;+/g, ';'); // 多个分号合并为一个
-      return `.${selector}{${cleanProps}}`;
+      return `.${escapedSelector}{${cleanProps}}`;
     }
     return '';
   }
@@ -199,7 +221,7 @@ class CssFormatter {
         braceCount--;
         if (braceCount === 0) {
           // 找到规则结束
-          // 清理选择器：移除点号前缀用于排序
+          // 清理选择器：移除点号前缀用于排序（注意：转义字符不需要处理，排序时保持原样）
           const cleanSelector = selector.replace(/^\./, '').trim();
           if (cleanSelector) {
             rules.push({

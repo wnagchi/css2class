@@ -155,6 +155,67 @@ class UnifiedWriter {
     }
   }
 
+  // 提取 base class（去除响应式前缀等变体前缀）
+  extractBaseClass(className) {
+    if (!className || typeof className !== 'string') {
+      return className;
+    }
+
+    // 按 : 拆分，取最后一段作为 base class
+    const parts = className.split(':');
+    return parts[parts.length - 1];
+  }
+
+  // 解析响应式变体前缀（如 sm:, md: 等）
+  parseResponsiveVariant(className) {
+    if (!className || typeof className !== 'string') {
+      return { variant: null, baseClass: className };
+    }
+
+    const variants = this.configManager.getVariants();
+    const responsiveVariants = variants.responsive || [];
+
+    // 按 : 拆分，检查第一部分是否是响应式变体
+    const parts = className.split(':');
+    if (parts.length >= 2) {
+      const potentialVariant = parts[0];
+      if (responsiveVariants.includes(potentialVariant)) {
+        const baseClass = parts.slice(1).join(':');
+        return { variant: potentialVariant, baseClass };
+      }
+    }
+
+    return { variant: null, baseClass: className };
+  }
+
+  // 用 @media 查询包裹 CSS 规则
+  wrapWithMediaQuery(cssRule, variant) {
+    const breakpoints = this.configManager.getBreakpoints();
+    const breakpoint = breakpoints[variant];
+
+    if (!breakpoint) {
+      this.eventBus.emit('unifiedWriter:warning', {
+        warning: `Breakpoint not found for variant: ${variant}`,
+      });
+      return cssRule; // 如果没有找到断点，返回原始规则
+    }
+
+    const cssFormat = this.configManager.getCssFormat();
+    const isCompressed = cssFormat === 'compressed';
+    const isSingleLine = cssFormat === 'singleLine';
+
+    if (isCompressed) {
+      // 压缩格式：@media(min-width:640px){.sm\:flex{display:flex}}
+      return `@media(min-width:${breakpoint}){${cssRule.trim()}}`;
+    } else if (isSingleLine) {
+      // 单行格式：@media (min-width: 640px) { .sm\:flex { display: flex; } }
+      return `@media (min-width: ${breakpoint}) { ${cssRule.trim()} }\n`;
+    } else {
+      // 多行格式
+      return `@media (min-width: ${breakpoint}) {\n${cssRule.trim()}\n}\n`;
+    }
+  }
+
   // 生成静态类CSS（模拟原始代码中的 creatStaticClass）
   async generateStaticCSS(userStaticClassArr) {
     if (!Array.isArray(userStaticClassArr) || userStaticClassArr.length === 0) {
@@ -175,13 +236,25 @@ class UnifiedWriter {
           return; // 跳过重复的类
         }
 
-        const staticClassItem = userStaticClass.find(([k, v]) => k === className);
+        // 解析响应式变体
+        const { variant, baseClass } = this.parseResponsiveVariant(className);
+
+        // 使用 base class 查找静态类定义
+        const staticClassItem = userStaticClass.find(([k, v]) => k === baseClass);
 
         if (staticClassItem !== undefined) {
           cssWrite.add(className);
+          // 使用原始 class 名（包含响应式前缀）生成 CSS
           const cssClassName = className.replaceAll('_', '-');
           // 使用格式化器格式化CSS
-          str += this.cssFormatter.formatRule(cssClassName, staticClassItem[1]);
+          let cssRule = this.cssFormatter.formatRule(cssClassName, staticClassItem[1]);
+
+          // 如果有响应式变体，用 @media 包裹
+          if (variant) {
+            cssRule = this.wrapWithMediaQuery(cssRule, variant);
+          }
+
+          str += cssRule;
         }
       });
 

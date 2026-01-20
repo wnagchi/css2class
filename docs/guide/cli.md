@@ -21,7 +21,9 @@ class2css [options]
 
 ### 运行时覆盖（覆盖配置文件）
 
-- **`-i, --input <path>`**：覆盖输入目录（扫描/监听目录）
+- **`-i, --input <path>`**：覆盖输入目录（扫描/监听入口）
+  - 目前该参数为**单路径**覆盖（对应 `multiFile.entry.path` 的单值用法）
+  - 如需多目录/多文件入口，请在配置中使用 `multiFile.entry.path: string[]`
 - **`-o, --output <path>`**：覆盖输出目录
 - **`-f, --output-file <name>`**：覆盖输出文件名
 - **`-t, --output-type <type>`**：覆盖输出类型（`filePath` 或 `uniFile`）

@@ -19,24 +19,35 @@ class FileWatcher {
 
     try {
       const multiFile = this.configManager.getMultiFile();
-      if (!multiFile || !multiFile.entry || !multiFile.entry.path) {
+      const entryPaths = this.configManager.getMultiFileEntryPaths();
+      if (!multiFile || !multiFile.entry || entryPaths.length === 0) {
         throw new Error('MultiFile configuration is required for file watching');
       }
 
-      // 使用相对路径，并规范化为正斜杠
-      const watchPath = multiFile.entry.path.replace(/\\/g, '/');
       const fileTypes = multiFile.entry.fileType || ['html', 'wxml'];
 
-      // 构建文件匹配模式
-      const patterns = fileTypes.map((type) => `${watchPath}/**/*.${type}`);
+      // 构建监听目标（支持多目录 + 多文件）
+      const targets = [];
+      for (const p of entryPaths) {
+        const normalized = p.replace(/\\/g, '/');
+        const ext = path.extname(normalized).slice(1).toLowerCase();
+        // 如果看起来是具体文件且扩展名在监听范围内，则直接监听该文件
+        if (ext && fileTypes.includes(ext)) {
+          targets.push(normalized);
+        } else {
+          // 当作目录（或未知），监听其下指定类型文件
+          for (const type of fileTypes) {
+            targets.push(`${normalized}/**/*.${type}`);
+          }
+        }
+      }
 
-      // console.log('[FileWatcher] 监听路径:', watchPath);
-      // console.log('[FileWatcher] 监听模式:', patterns);
+      // console.log('[FileWatcher] 监听目标:', targets);
 
-      this.eventBus.emit('watcher:starting', { path: watchPath, patterns });
+      this.eventBus.emit('watcher:starting', { paths: entryPaths, targets });
 
       // 创建文件监听器
-      this.watcher = chokidar.watch(patterns, {
+      this.watcher = chokidar.watch(targets, {
         ignoreInitial: false,
         persistent: true,
         usePolling: true,
@@ -68,13 +79,13 @@ class FileWatcher {
         .on('ready', () => {
           this.isWatching = true;
           this.eventBus.emit('watcher:ready', {
-            path: watchPath,
-            patterns: patterns,
+            paths: entryPaths,
+            targets,
           });
         });
 
       // 记录监听的路径
-      this.watchedPaths.add(watchPath);
+      for (const p of entryPaths) this.watchedPaths.add(p);
     } catch (error) {
       this.eventBus.emit('watcher:error', error);
       throw error;

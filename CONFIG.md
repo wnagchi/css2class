@@ -17,19 +17,46 @@
 
 ## 配置文件结构
 
-配置文件应命名为 `class2css.config.js`，放置在项目根目录。
+配置已拆分为两个文件，便于管理和维护：
+
+### 主配置文件：`class2css.config.js`
+
+工具运行相关的配置（系统设置、输出路径等）：
 
 ```javascript
+// 引入样式规则配置
+const stylesConfig = require('./styles.config.js');
+
 module.exports = {
   system: { /* 系统配置 */ },
   output: { /* 输出配置 */ },
   multiFile: { /* 多文件配置 */ },
-  atomicRules: { /* 原子化规则 */ },
-  baseClassName: { /* 基础类配置 */ },
-  importantFlags: { /* Important 标识 */ },
-  variants: { /* 变体规则 */ }
+  importantFlags: stylesConfig.importantFlags,
+  atomicRules: stylesConfig.atomicRules,
+  baseClassName: stylesConfig.baseClassName,
+  variants: stylesConfig.variants,
+  breakpoints: stylesConfig.breakpoints
 };
 ```
+
+### 样式规则配置文件：`styles.config.js`
+
+样式解析规则相关的配置（原子化规则、基础类、变体、断点等）：
+
+```javascript
+module.exports = {
+  atomicRules: { /* 原子化规则 */ },
+  baseClassName: { /* 基础类配置 */ },
+  variants: { /* 变体规则 */ },
+  breakpoints: { /* 响应式断点 */ },
+  importantFlags: { /* Important 标识 */ }
+};
+```
+
+**优势**：
+- **关注点分离**：工具配置与样式规则分离，更清晰
+- **易于维护**：样式规则集中管理，便于团队协作
+- **灵活扩展**：可以轻松替换或扩展样式规则配置
 
 ## 系统配置 (system)
 
@@ -253,7 +280,10 @@ commonCssPath: './common.css'
 ```javascript
 multiFile: {
   entry: {
-    path: './src',
+    // 单入口
+    // path: './src',
+    // 多入口（目录/文件可混用）
+    path: ['./src', './subpackages', './pages/index.wxml'],
     fileName: ['index.wxml', 'detail.wxml'],
     fileType: ['html', 'wxml']
   },
@@ -270,14 +300,18 @@ multiFile: {
 
 #### path
 
-**类型**: `string`  
+**类型**: `string | Array<string>`  
 **必需**: 是
 
-监听文件的根目录。
+扫描/监听入口路径。
+
+- 当为 `string`：表示单目录或单文件
+- 当为 `Array<string>`：表示多目录/多文件（目录与文件可混用）
 
 ```javascript
 path: './src'
 path: 'D:/project/src'
+path: ['./src', './packages', './pages/index.wxml']
 ```
 
 #### fileName
@@ -712,7 +746,7 @@ custom: ['--important', '##IMP##']
 
 ## 变体规则 (variants)
 
-配置响应式和状态变体（计划中的功能）。
+配置响应式和状态变体。
 
 ```javascript
 variants: {
@@ -720,6 +754,96 @@ variants: {
   states: ['hover', 'focus', 'active', 'disabled'],
   darkMode: ['dark']
 }
+```
+
+### 响应式变体 (responsive)
+
+响应式变体允许你根据屏幕尺寸应用不同的样式。使用 Tailwind 风格的语法：`sm:`, `md:`, `lg:`, `xl:`, `2xl:`。
+
+#### 使用示例
+
+```html
+<!-- 基础样式 + 响应式样式 -->
+<view class="w-full sm:w-100 md:w-200 lg:w-300">
+  <!-- 默认宽度 100%，小屏 100rpx，中屏 200rpx，大屏 300rpx -->
+</view>
+
+<!-- 响应式静态类 -->
+<view class="hidden sm:flex">
+  <!-- 默认隐藏，小屏及以上显示为 flex -->
+</view>
+
+<!-- 响应式颜色 -->
+<text class="color-red sm:color-blue md:color-green">
+  <!-- 默认红色，小屏蓝色，中屏绿色 -->
+</text>
+```
+
+#### 断点配置 (breakpoints)
+
+默认使用 Tailwind 标准断点值，可在配置中自定义：
+
+```javascript
+breakpoints: {
+  sm: '640px',   // 小屏幕（手机横屏）
+  md: '768px',   // 中等屏幕（平板）
+  lg: '1024px',  // 大屏幕（笔记本）
+  xl: '1280px',  // 超大屏幕（桌面）
+  '2xl': '1536px' // 超超大屏幕（大桌面）
+}
+```
+
+**自定义断点**：
+
+```javascript
+breakpoints: {
+  sm: '480px',   // 自定义小屏断点
+  md: '768px',
+  lg: '1024px',
+  xl: '1440px',  // 自定义超大屏断点
+  '2xl': '1920px'
+}
+```
+
+**注意**：
+- 断点值必须包含单位（如 `px`, `em`, `rem`）
+- 如果配置中未指定 `breakpoints`，将使用默认 Tailwind 值
+- 响应式变体使用 `min-width` 媒体查询（移动优先）
+
+#### 生成的 CSS 示例
+
+```css
+/* 基础样式 */
+.w-full { width: 100%; }
+
+/* 响应式样式 */
+@media (min-width: 640px) {
+  .sm\:w-100 { width: 200rpx; }
+}
+
+@media (min-width: 768px) {
+  .md\:w-200 { width: 400rpx; }
+}
+
+@media (min-width: 1024px) {
+  .lg\:w-300 { width: 600rpx; }
+}
+```
+
+### 状态变体 (states)
+
+状态变体配置（计划中的功能，当前仅配置名称）。
+
+```javascript
+states: ['hover', 'focus', 'active', 'disabled', 'first', 'last', 'odd', 'even']
+```
+
+### 暗色模式 (darkMode)
+
+暗色模式变体配置（计划中的功能，当前仅配置名称）。
+
+```javascript
+darkMode: ['dark']
 ```
 
 ## 配置示例

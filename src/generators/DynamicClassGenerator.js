@@ -47,20 +47,25 @@ class DynamicClassGenerator {
           return;
         }
 
+        // name 现在可能是 [prefix, value] 或 [prefix, value, variant]
+        const variant = name.length >= 3 ? name[2] : null;
+        
         if (cssNameMap.has(name[0])) {
-          const classCss = this.getClassListStr([name[0], name[1]], className, isImportant);
+          const classCss = this.getClassListStr([name[0], name[1]], className, isImportant, variant);
           cssStr += classCss;
           this.eventBus.emit('generator:dynamic:generated', {
             className,
             cleanName: cleanClassName,
             isImportant,
+            variant,
           });
         } else {
-          userBaseClassArr.push([name[0], name[1], className, isImportant]);
+          userBaseClassArr.push([name[0], name[1], className, isImportant, variant]);
           this.eventBus.emit('generator:dynamic:userBase', {
             className,
             cleanName: cleanClassName,
             isImportant,
+            variant,
           });
         }
       } catch (error) {
@@ -80,8 +85,34 @@ class DynamicClassGenerator {
     return { cssStr, userBaseClassArr };
   }
 
-  // 智能前缀解析方法 - 支持复合前缀如 max-w, min-h 等
+  // 解析响应式变体前缀（如 sm:, md: 等）
+  parseResponsiveVariant(className) {
+    if (!className || typeof className !== 'string') {
+      return { variant: null, baseClass: className };
+    }
+
+    const variants = this.configManager.getVariants();
+    const responsiveVariants = variants.responsive || [];
+
+    // 按 : 拆分，检查第一部分是否是响应式变体
+    const parts = className.split(':');
+    if (parts.length >= 2) {
+      const potentialVariant = parts[0];
+      if (responsiveVariants.includes(potentialVariant)) {
+        const baseClass = parts.slice(1).join(':'); // 支持嵌套的 :（虽然当前不支持，但保留兼容性）
+        return { variant: potentialVariant, baseClass };
+      }
+    }
+
+    return { variant: null, baseClass: className };
+  }
+
+  // 智能前缀解析方法 - 支持复合前缀如 max-w, min-h 等，同时支持响应式前缀
   parseClassNameIntelligent(className) {
+    // 先解析响应式变体
+    const { variant, baseClass } = this.parseResponsiveVariant(className);
+    
+    // 使用 base class 进行解析
     const cssNameMap = this.configManager.getCssNameMap();
 
     // 获取所有已知前缀，按长度降序排列
@@ -89,31 +120,33 @@ class DynamicClassGenerator {
 
     // 尝试匹配每个前缀
     for (const prefix of prefixes) {
-      if (className.startsWith(prefix + '-')) {
-        const value = className.substring(prefix.length + 1);
+      if (baseClass.startsWith(prefix + '-')) {
+        const value = baseClass.substring(prefix.length + 1);
         // 确保值部分不为空且不包含连字符
         if (value && !value.includes('-')) {
           this.eventBus.emit('generator:dynamic:prefix_matched', {
             className,
             prefix,
             value,
+            variant,
             method: 'intelligent_parsing',
           });
-          return [prefix, value];
+          return [prefix, value, variant]; // 返回包含 variant 的三元组
         }
       }
     }
 
     // 降级到原有逻辑
-    const parts = className.split('-');
+    const parts = baseClass.split('-');
     if (parts.length === 2) {
       this.eventBus.emit('generator:dynamic:prefix_matched', {
         className,
         prefix: parts[0],
         value: parts[1],
+        variant,
         method: 'fallback_split',
       });
-      return parts;
+      return [parts[0], parts[1], variant]; // 返回包含 variant 的三元组
     }
 
     this.eventBus.emit('generator:dynamic:parse_failed', {
@@ -124,12 +157,15 @@ class DynamicClassGenerator {
   }
 
   // 生成单个类的CSS字符串（优化版）
-  getClassListStr(name, originalClassName, isImportant = false) {
-    // 检查缓存
-    const cacheKey = `${name[0]}-${name[1]}-${isImportant}`;
+  getClassListStr(name, originalClassName, isImportant = false, variant = null) {
+    // 检查缓存（包含 variant 信息）
+    const cacheKey = `${name[0]}-${name[1]}-${isImportant}-${variant || ''}`;
     if (this.cacheEnabled && this.cssCache.has(cacheKey)) {
       const cached = this.cssCache.get(cacheKey);
-      return cached.replace(/\.[\w-]+\s*{/, `.${originalClassName} {`);
+      // 替换选择器时需要考虑转义
+      const escapedSelector = this.cssFormatter.escapeSelector(originalClassName);
+      // 修复：将 - 放在字符类末尾，避免被解释为范围操作符
+      return cached.replace(/\.[\w\\:-]+\s*{/, `.${escapedSelector} {`);
     }
 
     const classNameDefinition = this.configManager.getCssNameMap().get(name[0]);
@@ -149,7 +185,8 @@ class DynamicClassGenerator {
         name,
         originalClassName,
         classNameDefinition,
-        isImportant
+        isImportant,
+        variant
       );
     } else {
       // 处理字符串类型的CSS定义
@@ -157,7 +194,8 @@ class DynamicClassGenerator {
         name,
         originalClassName,
         classNameDefinition,
-        isImportant
+        isImportant,
+        variant
       );
     }
 
@@ -170,7 +208,7 @@ class DynamicClassGenerator {
   }
 
   // 生成基于对象定义的CSS
-  generateObjectBasedCSS(name, originalClassName, classNameDefinition, isImportant) {
+  generateObjectBasedCSS(name, originalClassName, classNameDefinition, isImportant, variant = null) {
     if (!classNameDefinition.classArr) {
       this.eventBus.emit('generator:warning', {
         warning: `classArr not found in definition for: ${name[0]}`,
@@ -210,11 +248,18 @@ class DynamicClassGenerator {
     }));
 
     // 使用格式化器格式化CSS
-    return this.cssFormatter.formatRule(originalClassName, processedValuesArray);
+    const cssRule = this.cssFormatter.formatRule(originalClassName, processedValuesArray);
+
+    // 如果有响应式变体，用 @media 包裹
+    if (variant) {
+      return this.wrapWithMediaQuery(cssRule, variant);
+    }
+
+    return cssRule;
   }
 
   // 生成基于字符串定义的CSS
-  generateStringBasedCSS(name, originalClassName, classNameDefinition, isImportant) {
+  generateStringBasedCSS(name, originalClassName, classNameDefinition, isImportant, variant = null) {
     const rawValue = name[1];
     let processedValue;
 
@@ -229,7 +274,42 @@ class DynamicClassGenerator {
     const finalValue = isImportant ? `${processedValue} !important` : processedValue;
 
     // 使用格式化器格式化CSS
-    return this.cssFormatter.formatRule(originalClassName, `${classNameDefinition}: ${finalValue}`);
+    const cssRule = this.cssFormatter.formatRule(originalClassName, `${classNameDefinition}: ${finalValue}`);
+
+    // 如果有响应式变体，用 @media 包裹
+    if (variant) {
+      return this.wrapWithMediaQuery(cssRule, variant);
+    }
+
+    return cssRule;
+  }
+
+  // 用 @media 查询包裹 CSS 规则
+  wrapWithMediaQuery(cssRule, variant) {
+    const breakpoints = this.configManager.getBreakpoints();
+    const breakpoint = breakpoints[variant];
+
+    if (!breakpoint) {
+      this.eventBus.emit('generator:warning', {
+        warning: `Breakpoint not found for variant: ${variant}`,
+      });
+      return cssRule; // 如果没有找到断点，返回原始规则
+    }
+
+    const cssFormat = this.configManager.getCssFormat();
+    const isCompressed = cssFormat === 'compressed';
+    const isSingleLine = cssFormat === 'singleLine';
+
+    if (isCompressed) {
+      // 压缩格式：@media(min-width:640px){.sm\:w-100{width:200rpx}}
+      return `@media(min-width:${breakpoint}){${cssRule.trim()}}`;
+    } else if (isSingleLine) {
+      // 单行格式：@media (min-width: 640px) { .sm\:w-100 { width: 200rpx; } }
+      return `@media (min-width: ${breakpoint}) { ${cssRule.trim()} }\n`;
+    } else {
+      // 多行格式
+      return `@media (min-width: ${breakpoint}) {\n${cssRule.trim()}\n}\n`;
+    }
   }
 
   // 传统的值处理逻辑（向后兼容）
@@ -282,7 +362,8 @@ class DynamicClassGenerator {
 
     arr.forEach((item, index) => {
       try {
-        const [className, value, originalClassName, isImportant] = item;
+        // item 现在可能是 [className, value, originalClassName, isImportant] 或 [className, value, originalClassName, isImportant, variant]
+        const [className, value, originalClassName, isImportant, variant] = item;
         const classKey = originalClassName;
 
         if (cssWrite.has(classKey)) {
@@ -306,22 +387,31 @@ class DynamicClassGenerator {
         cssWrite.add(classKey);
         const cssClassName = className.replaceAll('_', '-');
 
+        let cssRule = '';
         if (this.isArray(baseClassItem[1])) {
           const cssValue = isImportant ? `${value} !important` : value;
           // 使用格式化器格式化CSS
-          str += this.cssFormatter.formatRule(originalClassName, `${cssClassName}: ${cssValue}`);
+          cssRule = this.cssFormatter.formatRule(originalClassName, `${cssClassName}: ${cssValue}`);
         } else if (this.isObject(baseClassItem[1]) && baseClassItem[1][value] !== undefined) {
           const cssValue = isImportant
             ? `${baseClassItem[1][value]} !important`
             : baseClassItem[1][value];
           const propertyName = baseClassItem[1]['ABBR'] || cssClassName;
           // 使用格式化器格式化CSS
-          str += this.cssFormatter.formatRule(originalClassName, `${propertyName}: ${cssValue}`);
+          cssRule = this.cssFormatter.formatRule(originalClassName, `${propertyName}: ${cssValue}`);
         }
+
+        // 如果有响应式变体，用 @media 包裹
+        if (variant && cssRule) {
+          cssRule = this.wrapWithMediaQuery(cssRule, variant);
+        }
+
+        str += cssRule;
 
         this.eventBus.emit('generator:userBase:generated', {
           className: originalClassName,
           isImportant,
+          variant,
         });
       } catch (error) {
         this.eventBus.emit('generator:userBase:error', {

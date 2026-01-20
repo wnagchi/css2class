@@ -323,13 +323,13 @@ class ConfigWatcher {
       }
 
       // 检查监听路径变化
-      const oldWatchPath = oldConfig?.multiFile?.path;
-      const newWatchPath = newConfig?.multiFile?.path;
+      const oldWatchPath = oldConfig?.multiFile?.entry?.paths ?? oldConfig?.multiFile?.entry?.path;
+      const newWatchPath = newConfig?.multiFile?.entry?.paths ?? newConfig?.multiFile?.entry?.path;
 
       if (JSON.stringify(oldWatchPath) !== JSON.stringify(newWatchPath)) {
         validation.changes.push({
           type: 'watchPath',
-          field: 'multiFile.path',
+          field: 'multiFile.entry.path(s)',
           oldValue: oldWatchPath,
           newValue: newWatchPath,
           impact: 'high', // 需要重新设置文件监听

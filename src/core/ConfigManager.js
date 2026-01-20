@@ -14,6 +14,7 @@ class ConfigManager {
     this._fileUtils = null;
     this._logger = null;
     this._commonCssCache = null;
+    this.breakpoints = null;
 
     this.loadConfig();
   }
@@ -27,6 +28,17 @@ class ConfigManager {
 
       // 清除require缓存以确保重新加载
       delete require.cache[require.resolve(absoluteConfigPath)];
+      
+      // 清除样式配置文件的缓存（如果存在）
+      try {
+        const stylesConfigPath = path.resolve(path.dirname(absoluteConfigPath), 'styles.config.js');
+        if (require.cache[stylesConfigPath]) {
+          delete require.cache[stylesConfigPath];
+        }
+      } catch (e) {
+        // 样式配置文件不存在或无法解析，忽略
+      }
+      
       this.config = require(absoluteConfigPath);
 
       this.updateConfigReferences();
@@ -69,7 +81,26 @@ class ConfigManager {
     // 清空共用CSS缓存，确保配置变更时重新读取
     this._commonCssCache = null;
 
+    // 更新 breakpoints 配置（响应式断点）
+    this.updateBreakpoints();
+
     this.eventBus.emit('config:references:updated');
+  }
+
+  // 更新 breakpoints 配置
+  updateBreakpoints() {
+    // 默认 Tailwind 断点值
+    const defaultBreakpoints = {
+      sm: '640px',
+      md: '768px',
+      lg: '1024px',
+      xl: '1280px',
+      '2xl': '1536px',
+    };
+
+    // 如果配置中有 breakpoints，则合并（用户配置优先）
+    const configBreakpoints = this.config.breakpoints || {};
+    this.breakpoints = { ...defaultBreakpoints, ...configBreakpoints };
   }
 
   // 从atomicRules构建cssName格式的映射
@@ -130,6 +161,25 @@ class ConfigManager {
     return this.multiFile;
   }
 
+  /**
+   * 获取 multiFile.entry 下的所有监听/扫描入口路径（支持多目录/多文件）
+   * - 兼容：entry.path 可以是 string 或 string[]
+   * - 推荐：entry.paths: string[]
+   * @returns {string[]}
+   */
+  getMultiFileEntryPaths() {
+    const entry = this.multiFile?.entry;
+    const pathsValue = entry?.paths ?? entry?.path;
+
+    if (Array.isArray(pathsValue)) {
+      return pathsValue.filter((p) => typeof p === 'string' && p.trim()).map((p) => p.trim());
+    }
+    if (typeof pathsValue === 'string' && pathsValue.trim()) {
+      return [pathsValue.trim()];
+    }
+    return [];
+  }
+
   getUnitConversion() {
     return Number(this.config.system?.unitConversion || this.config.unitConversion) || 1;
   }
@@ -146,6 +196,16 @@ class ConfigManager {
   getSortClasses() {
     // 获取排序配置，默认返回 false
     return this.config.system?.sortClasses || false;
+  }
+
+  getBreakpoints() {
+    // 获取响应式断点配置
+    return this.breakpoints || {};
+  }
+
+  getVariants() {
+    // 获取变体配置（responsive, states, darkMode 等）
+    return this.config.variants || {};
   }
 
   getOutput() {
@@ -256,8 +316,15 @@ class ConfigManager {
     }
 
     if (this.config.multiFile) {
-      if (!this.config.multiFile.entry || !this.config.multiFile.entry.path) {
-        errors.push('multiFile.entry.path is required when multiFile is enabled');
+      const entry = this.config.multiFile.entry;
+      const pathsValue = entry?.paths ?? entry?.path;
+      const hasValidString = typeof pathsValue === 'string' && pathsValue.trim().length > 0;
+      const hasValidArray =
+        Array.isArray(pathsValue) &&
+        pathsValue.some((p) => typeof p === 'string' && p.trim().length > 0);
+
+      if (!hasValidString && !hasValidArray) {
+        errors.push('multiFile.entry.path (string|string[]) or multiFile.entry.paths (string[]) is required when multiFile is enabled');
       }
     }
 

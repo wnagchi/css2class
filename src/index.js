@@ -287,8 +287,7 @@ class Class2CSS {
       if (watchPathChanged) {
         this.logger.info('监听路径已更改，正在重启文件监听器...');
         this.fileWatcher.stopWatching();
-        const config = this.configManager.getConfig();
-        this.fileWatcher.startWatching(config.multiFile.path, config.multiFile.pattern);
+        await this.fileWatcher.startWatching();
       }
 
       // 检查是否需要重新设置输出模式
@@ -538,13 +537,14 @@ class Class2CSS {
       this.logger.scan('Starting full scan...');
 
       const multiFile = this.configManager.getMultiFile();
-      if (!multiFile || !multiFile.entry || !multiFile.entry.path) {
+      const entryPaths = this.configManager.getMultiFileEntryPaths();
+      if (!multiFile || !multiFile.entry || entryPaths.length === 0) {
         throw new Error('MultiFile configuration is required for full scan');
       }
 
       // 执行真正的全量扫描
       const result = await this.fullScanManager.performFullScan(
-        multiFile.entry.path,
+        entryPaths,
         multiFile.entry.fileType || ['html', 'wxml'],
         this.classParser,
         this.cacheManager,

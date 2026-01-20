@@ -37,7 +37,23 @@ class FileWriter {
         });
       } else if (cssOutType === 'filePath') {
         // 将CSS文件输出到监听文件对应的目录下
-        const relativePath = path.relative(multiFile.entry.path, filePath);
+        const entryRoots = this.configManager.getMultiFileEntryPaths();
+        const fileAbs = path.resolve(filePath);
+
+        // 选择“最匹配”的根目录（最长前缀），以支持多目录入口
+        let bestRootAbs = null;
+        let bestRel = null;
+        for (const root of entryRoots) {
+          const rootAbs = path.resolve(root);
+          const rel = path.relative(rootAbs, fileAbs);
+          const isInside = rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+          if (isInside && (!bestRootAbs || rootAbs.length > bestRootAbs.length)) {
+            bestRootAbs = rootAbs;
+            bestRel = rel;
+          }
+        }
+
+        const relativePath = bestRel || path.basename(fileAbs);
         const dirPath = path.dirname(relativePath);
         const baseName = path.basename(filePath, path.extname(filePath));
 

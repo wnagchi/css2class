@@ -245,7 +245,10 @@ console.log(stats);
 module.exports = {
   multiFile: {
     entry: {
-      path: "./src", // 需要扫描/监听的目录
+      // 扫描/监听入口：
+      // - string：单目录/单文件
+      // - string[]：多目录/多文件（目录与文件可混用）
+      path: "./src",
       fileType: ["wxml", "html"],
     },
     output: {

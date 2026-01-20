@@ -108,7 +108,7 @@
 **问题**：修改文件后，CSS 没有更新
 
 **解决**：
-1. 检查文件是否在监听范围内（`multiFile.entry.path`）
+1. 检查文件是否在监听范围内（`multiFile.entry.path`，支持 `string | string[]` 多入口）
 2. 检查文件扩展名是否匹配（`multiFile.entry.fileType`）
 3. 确认监听模式已启用（未使用 `--no-watch`）
 4. 检查文件保存是否完整（某些编辑器可能分步保存）

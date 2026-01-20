@@ -44,25 +44,31 @@ class ClassParser {
         for (const className of classes) {
           const cleanName = this.importantParser.cleanImportantFlag(className);
 
-          // 智能类名预处理和验证
+          // 提取 base class（处理响应式前缀如 sm:, md: 等）
+          // 按 : 拆分，取最后一段作为 base class
+          const baseClass = this.extractBaseClass(cleanName);
+
+          // 智能类名预处理和验证（使用 base class 进行分析）
           const processedClass = this.preprocessClassName(className, cleanName);
 
-          // 先检查是否是静态类
-          if (this.userStaticClassSet.has(cleanName)) {
-            userStaticList.add(processedClass.original);
+          // 先检查是否是静态类（使用 base class 检查）
+          if (this.userStaticClassSet.has(baseClass)) {
+            userStaticList.add(processedClass.original); // 保存原始 class 名（如 sm:flex）
             this.eventBus.emit('parser:static:found', {
               className: processedClass.original,
               cleanName,
+              baseClass,
               processed: processedClass,
             });
           }
 
-          // 再检查是否是动态类
-          if (cleanName.includes('-')) {
-            classList.add(processedClass.original);
+          // 再检查是否是动态类（使用 base class 检查）
+          if (baseClass.includes('-')) {
+            classList.add(processedClass.original); // 保存原始 class 名（如 sm:w-100）
             this.eventBus.emit('parser:dynamic:found', {
               className: processedClass.original,
               cleanName,
+              baseClass,
               processed: processedClass,
             });
           }
@@ -85,6 +91,18 @@ class ClassParser {
       this.eventBus.emit('parser:error', { error: error.message });
       return { classArr: [], userStaticClassArr: [] };
     }
+  }
+
+  // 提取 base class（去除响应式前缀等变体前缀）
+  extractBaseClass(className) {
+    if (!className || typeof className !== 'string') {
+      return className;
+    }
+
+    // 按 : 拆分，取最后一段作为 base class
+    // 例如: "sm:w-100" -> "w-100", "md:flex" -> "flex"
+    const parts = className.split(':');
+    return parts[parts.length - 1];
   }
 
   // 智能类名预处理
