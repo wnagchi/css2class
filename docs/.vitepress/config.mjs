@@ -4,6 +4,9 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
+  // GitHub Pages（Project Pages）部署路径： https://<user>.github.io/<repo>/
+  // 所以这里必须设置为 `/<repo>/`（末尾带 /）
+  base: '/css2class/',
   title: 'Class2CSS',
   description: '企业级原子化CSS生成工具，支持智能单位处理、配置验证、性能缓存和向后兼容',
   lang: 'zh-CN',
