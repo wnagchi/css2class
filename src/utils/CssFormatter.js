@@ -3,6 +3,36 @@ class CssFormatter {
     this.format = format;
   }
 
+  // 将 states 变体转换为 CSS 伪类选择器片段
+  // 例如：['hover','first','odd'] -> ':hover:first-child:nth-child(odd)'
+  buildStatePseudoSelectors(stateVariants = []) {
+    if (!Array.isArray(stateVariants) || stateVariants.length === 0) {
+      return '';
+    }
+
+    const map = {
+      hover: 'hover',
+      focus: 'focus',
+      active: 'active',
+      disabled: 'disabled',
+      first: 'first-child',
+      last: 'last-child',
+      odd: 'nth-child(odd)',
+      even: 'nth-child(even)',
+    };
+
+    const pseudos = [];
+    for (const v of stateVariants) {
+      if (!v || typeof v !== 'string') continue;
+      const key = v.trim();
+      if (!key) continue;
+      const mapped = map[key] || key; // 允许用户扩展为标准伪类（如 visited、focus-within 等）
+      pseudos.push(mapped);
+    }
+
+    return pseudos.length > 0 ? ':' + pseudos.join(':') : '';
+  }
+
   // 转义 CSS 选择器中的特殊字符
   // 确保生成的 CSS 选择器能正确匹配 HTML/WXML 中的 class 名
   escapeSelector(selector) {
@@ -31,26 +61,30 @@ class CssFormatter {
   }
 
   // 格式化单个CSS规则
-  formatRule(selector, properties, format = null) {
+  // stateVariants: 状态变体数组（如 ['hover', 'focus']），用于生成伪类选择器
+  formatRule(selector, properties, format = null, stateVariants = []) {
     const targetFormat = format || this.format;
 
+    // 构建带伪类的选择器
+    const escapedSelector = this.escapeSelector(selector);
+    const pseudoSelectors = this.buildStatePseudoSelectors(stateVariants);
+    const fullSelector = escapedSelector + pseudoSelectors;
+
     if (targetFormat === 'compressed') {
-      return this.formatRuleCompressed(selector, properties);
+      return this.formatRuleCompressed(fullSelector, properties);
     } else if (targetFormat === 'singleLine') {
-      return this.formatRuleSingleLine(selector, properties);
+      return this.formatRuleSingleLine(fullSelector, properties);
     } else {
-      return this.formatRuleMultiLine(selector, properties);
+      return this.formatRuleMultiLine(fullSelector, properties);
     }
   }
 
   // 多行格式（默认）
+  // 注意：selector 参数已经包含转义和伪类（由 formatRule 处理）
   formatRuleMultiLine(selector, properties) {
-    // 转义选择器中的特殊字符
-    const escapedSelector = this.escapeSelector(selector);
-    
     if (Array.isArray(properties)) {
       // 属性数组格式：[{property: 'margin', value: '10rpx'}, ...]
-      let css = `\n.${escapedSelector} {\n`;
+      let css = `\n.${selector} {\n`;
       properties.forEach(({ property, value }) => {
         css += `  ${property}: ${value};\n`;
       });
@@ -58,36 +92,32 @@ class CssFormatter {
       return css;
     } else if (typeof properties === 'string') {
       // 字符串格式：'margin: 10rpx;'
-      return `\n.${escapedSelector} {\n  ${properties}\n}\n`;
+      return `\n.${selector} {\n  ${properties}\n}\n`;
     }
     return '';
   }
 
   // 单行格式
+  // 注意：selector 参数已经包含转义和伪类（由 formatRule 处理）
   formatRuleSingleLine(selector, properties) {
-    // 转义选择器中的特殊字符
-    const escapedSelector = this.escapeSelector(selector);
-    
     if (Array.isArray(properties)) {
       // 属性数组格式
       const propsStr = properties.map(({ property, value }) => `${property}: ${value}`).join('; ');
-      return `.${escapedSelector} { ${propsStr}; }\n`;
+      return `.${selector} { ${propsStr}; }\n`;
     } else if (typeof properties === 'string') {
       // 字符串格式
-      return `.${escapedSelector} { ${properties}; }\n`;
+      return `.${selector} { ${properties}; }\n`;
     }
     return '';
   }
 
   // 压缩格式
+  // 注意：selector 参数已经包含转义和伪类（由 formatRule 处理）
   formatRuleCompressed(selector, properties) {
-    // 转义选择器中的特殊字符
-    const escapedSelector = this.escapeSelector(selector);
-    
     if (Array.isArray(properties)) {
       // 属性数组格式
       const propsStr = properties.map(({ property, value }) => `${property}:${value}`).join(';');
-      return `.${escapedSelector}{${propsStr}}`;
+      return `.${selector}{${propsStr}}`;
     } else if (typeof properties === 'string') {
       // 字符串格式，移除空格但保留分号（除了最后一个分号）
       let cleanProps = properties.replace(/\s+/g, ''); // 移除所有空格
@@ -95,7 +125,7 @@ class CssFormatter {
       cleanProps = cleanProps.replace(/;+$/, ''); // 移除末尾的分号
       // 确保分号后面没有空格（虽然已经移除了空格，但为了安全）
       cleanProps = cleanProps.replace(/;+/g, ';'); // 多个分号合并为一个
-      return `.${escapedSelector}{${cleanProps}}`;
+      return `.${selector}{${cleanProps}}`;
     }
     return '';
   }
@@ -118,8 +148,29 @@ class CssFormatter {
   }
 
   // 压缩CSS（去除所有空格、换行、注释）
+  // 但保留 CLASS2CSS 分区标记注释（用于 appendDelta 模式）
   compressCSS(cssString) {
-    return cssString
+    // 先提取并临时替换分区标记，避免被移除
+    const partitionMarkers = {
+      baseStart: '/* CLASS2CSS:BASE_START */',
+      baseEnd: '/* CLASS2CSS:BASE_END */',
+      mediaStart: '/* CLASS2CSS:MEDIA_START */',
+      mediaEnd: '/* CLASS2CSS:MEDIA_END */',
+      deltaStart: '/* CLASS2CSS:DELTA_START */',
+    };
+    
+    const placeholders = {};
+    let tempCss = cssString;
+    for (const [key, marker] of Object.entries(partitionMarkers)) {
+      if (tempCss.includes(marker)) {
+        const placeholder = `__CLASS2CSS_${key.toUpperCase()}__`;
+        placeholders[placeholder] = marker;
+        tempCss = tempCss.replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), placeholder);
+      }
+    }
+
+    // 压缩 CSS（移除注释等）
+    let compressed = tempCss
       .replace(/\/\*[\s\S]*?\*\//g, '') // 移除注释
       .replace(/\s+/g, ' ') // 多个空格合并为一个
       .replace(/\s*{\s*/g, '{') // 移除大括号周围的空格
@@ -130,6 +181,13 @@ class CssFormatter {
       .replace(/;\s*}/g, '}') // 移除结束大括号前的分号（CSS规则结束不需要分号）
       .replace(/\s+/g, '') // 移除所有剩余空格
       .trim();
+
+    // 恢复分区标记
+    for (const [placeholder, marker] of Object.entries(placeholders)) {
+      compressed = compressed.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), marker);
+    }
+
+    return compressed;
   }
 
   // 单行CSS（每个规则单行，但规则之间换行）
@@ -308,6 +366,99 @@ class CssFormatter {
       mediaBlocks.map((b) => b.fullRule).join('') +
       suffix
     );
+  }
+
+  // 拆分 CSS 为 base 规则和 @media 规则（用于 appendDelta 分区插入）
+  // 返回 { baseCss, mediaCss, otherAtRulesPrefix, suffix }
+  splitBaseAndMedia(cssString) {
+    if (!cssString || typeof cssString !== 'string') {
+      return { baseCss: '', mediaCss: '', otherAtRulesPrefix: '', suffix: '' };
+    }
+
+    const blocks = [];
+    let prefix = '';
+    let suffix = '';
+
+    let i = 0;
+    let braceCount = 0;
+    let blockStart = -1;
+    let cursor = 0;
+
+    while (i < cssString.length) {
+      const char = cssString[i];
+
+      if (char === '{') {
+        if (braceCount === 0) {
+          const preSelector = cssString.slice(cursor, i);
+
+          // 尽量把无大括号语句（常见：@import/@charset）保留在 prefix
+          const lastSemicolon = preSelector.lastIndexOf(';');
+          if (lastSemicolon !== -1) {
+            const before = preSelector.slice(0, lastSemicolon + 1);
+            if (blocks.length === 0) {
+              prefix += before;
+            }
+            blockStart = cursor + lastSemicolon + 1;
+          } else {
+            blockStart = cursor;
+          }
+        }
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0 && blockStart !== -1) {
+          const fullRule = cssString.slice(blockStart, i + 1);
+          const openBraceIdx = fullRule.indexOf('{');
+          const selectorRaw = openBraceIdx === -1 ? '' : fullRule.slice(0, openBraceIdx);
+          const selectorTrim = selectorRaw.trim();
+
+          if (selectorTrim) {
+            blocks.push({
+              selectorTrim,
+              fullRule,
+              index: blocks.length,
+            });
+          }
+
+          cursor = i + 1;
+          blockStart = -1;
+        }
+      }
+
+      i++;
+    }
+
+    if (cursor < cssString.length) {
+      suffix = cssString.slice(cursor);
+    }
+
+    if (blocks.length === 0) {
+      return { baseCss: cssString, mediaCss: '', otherAtRulesPrefix: prefix, suffix };
+    }
+
+    const isMediaBlock = (b) => typeof b.selectorTrim === 'string' && b.selectorTrim.startsWith('@media');
+    const isAtRuleBlock = (b) => typeof b.selectorTrim === 'string' && b.selectorTrim.startsWith('@');
+
+    const baseBlocks = [];
+    const mediaBlocks = [];
+    const otherAtBlocks = [];
+
+    for (const b of blocks) {
+      if (isMediaBlock(b)) {
+        mediaBlocks.push(b);
+      } else if (isAtRuleBlock(b)) {
+        otherAtBlocks.push(b);
+      } else {
+        baseBlocks.push(b);
+      }
+    }
+
+    // 保持原始顺序（不排序）
+    const baseCss = baseBlocks.map((b) => b.fullRule).join('');
+    const mediaCss = mediaBlocks.map((b) => b.fullRule).join('');
+    const otherAtRulesPrefix = prefix + otherAtBlocks.map((b) => b.fullRule).join('');
+
+    return { baseCss, mediaCss, otherAtRulesPrefix, suffix };
   }
 
   // 对CSS规则进行字母排序

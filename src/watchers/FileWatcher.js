@@ -46,17 +46,32 @@ class FileWatcher {
 
       this.eventBus.emit('watcher:starting', { paths: entryPaths, targets });
 
+      // 监听策略：允许通过 config.system.watch 覆盖，默认保持现有行为（usePolling=true）
+      const config = this.configManager.getConfig ? this.configManager.getConfig() : {};
+      const watchConfig = (config && config.system && config.system.watch) || {};
+      const usePolling =
+        typeof watchConfig.usePolling === 'boolean' ? watchConfig.usePolling : true;
+      const interval = typeof watchConfig.interval === 'number' ? watchConfig.interval : 150;
+      const binaryInterval =
+        typeof watchConfig.binaryInterval === 'number' ? watchConfig.binaryInterval : 300;
+      const stabilityThreshold =
+        typeof watchConfig.stabilityThreshold === 'number'
+          ? watchConfig.stabilityThreshold
+          : 400;
+      const pollInterval =
+        typeof watchConfig.pollInterval === 'number' ? watchConfig.pollInterval : 100;
+
       // 创建文件监听器
       this.watcher = chokidar.watch(targets, {
         ignoreInitial: false,
         persistent: true,
-        usePolling: true,
-        interval: 150,
-        binaryInterval: 300,
+        usePolling,
+        interval,
+        binaryInterval,
         awaitWriteFinish: {
           // Windows/编辑器保存时可能经历“清空/重写/替换”的瞬时状态，适当加大稳定窗口降低误触发
-          stabilityThreshold: 400,
-          pollInterval: 100,
+          stabilityThreshold,
+          pollInterval,
         },
       });
 

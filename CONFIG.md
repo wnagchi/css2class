@@ -832,11 +832,38 @@ breakpoints: {
 
 ### 状态变体 (states)
 
-状态变体配置（计划中的功能，当前仅配置名称）。
+状态变体配置（Tailwind 风格伪类前缀）。当 class 以 `hover:` / `focus:` / `active:` 等前缀开头时，会生成对应的伪类选择器。
 
 ```javascript
 states: ['hover', 'focus', 'active', 'disabled', 'first', 'last', 'odd', 'even']
 ```
+
+#### 使用示例
+
+```html
+<div class="hover:bg-red hover:w-20"></div>
+<input class="focus:w-30" />
+<button class="active:opacity-50"></button>
+<div class="lg:hover:w-20"></div>
+```
+
+#### 生成的 CSS 示例
+
+```css
+.hover\:w-20:hover { width: 20px; }
+@media (min-width: 1024px) { .lg\:hover\:w-20:hover { width: 20px; } }
+```
+
+#### 伪类映射规则
+
+- `hover` → `:hover`
+- `focus` → `:focus`
+- `active` → `:active`
+- `disabled` → `:disabled`
+- `first` → `:first-child`
+- `last` → `:last-child`
+- `odd` → `:nth-child(odd)`
+- `even` → `:nth-child(even)`
 
 ### 暗色模式 (darkMode)
 

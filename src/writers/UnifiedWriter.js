@@ -170,35 +170,74 @@ class UnifiedWriter {
   }
 
   // 解析响应式变体前缀（如 sm:, md: 等）
+  // 保留向后兼容，内部调用 parseVariants
   parseResponsiveVariant(className) {
+    const result = this.parseVariants(className);
+    return { variant: result.responsiveVariant, baseClass: result.baseClass };
+  }
+
+  // 解析所有变体（响应式 + 状态变体如 hover/focus/active）
+  // 返回 { responsiveVariant, stateVariants, baseClass }
+  parseVariants(className) {
     if (!className || typeof className !== 'string') {
-      return { variant: null, baseClass: className };
+      return { responsiveVariant: null, stateVariants: [], baseClass: className };
     }
 
     const variants = this.configManager.getVariants();
     const responsiveVariants = variants.responsive || [];
+    const stateVariants = variants.states || [];
 
-    // 按 : 拆分，检查第一部分是否是响应式变体
+    // 按 : 拆分前缀链
     const parts = className.split(':');
-    if (parts.length >= 2) {
-      const potentialVariant = parts[0];
-      if (responsiveVariants.includes(potentialVariant)) {
-        const baseClass = parts.slice(1).join(':');
-        return { variant: potentialVariant, baseClass };
-      }
+    if (parts.length < 2) {
+      return { responsiveVariant: null, stateVariants: [], baseClass: className };
     }
 
-    return { variant: null, baseClass: className };
+    let responsiveVariant = null;
+    const foundStateVariants = [];
+    let baseClass = className;
+
+    // 从前往后解析：最多一个响应式变体（通常在链的最前面），可以有多个状态变体
+    let i = 0;
+    while (i < parts.length - 1) {
+      const potentialVariant = parts[i];
+
+      // 检查是否是响应式变体（只取第一个）
+      if (!responsiveVariant && responsiveVariants.includes(potentialVariant)) {
+        responsiveVariant = potentialVariant;
+        i++;
+        continue;
+      }
+
+      // 检查是否是状态变体
+      if (stateVariants.includes(potentialVariant)) {
+        foundStateVariants.push(potentialVariant);
+        i++;
+        continue;
+      }
+
+      // 遇到未知变体，停止解析，剩余部分作为 baseClass
+      break;
+    }
+
+    // baseClass 是最后一部分（或剩余部分）
+    baseClass = parts.slice(i).join(':');
+
+    return {
+      responsiveVariant,
+      stateVariants: foundStateVariants,
+      baseClass,
+    };
   }
 
   // 用 @media 查询包裹 CSS 规则
-  wrapWithMediaQuery(cssRule, variant) {
+  wrapWithMediaQuery(cssRule, responsiveVariant) {
     const breakpoints = this.configManager.getBreakpoints();
-    const breakpoint = breakpoints[variant];
+    const breakpoint = breakpoints[responsiveVariant];
 
     if (!breakpoint) {
       this.eventBus.emit('unifiedWriter:warning', {
-        warning: `Breakpoint not found for variant: ${variant}`,
+        warning: `Breakpoint not found for variant: ${responsiveVariant}`,
       });
       return cssRule; // 如果没有找到断点，返回原始规则
     }
@@ -226,7 +265,8 @@ class UnifiedWriter {
     }
 
     try {
-      const userStaticClass = this.configManager.getUserStaticClass();
+      // 使用 Map 索引进行 O(1) 查找，避免每个 class 都线性 find
+      const baseClassNameMap = this.configManager.getBaseClassNameMap();
       const cssWrite = new Set(); // 防重复集合
       let str = '';
 
@@ -239,22 +279,22 @@ class UnifiedWriter {
           return; // 跳过重复的类
         }
 
-        // 解析响应式变体
-        const { variant, baseClass } = this.parseResponsiveVariant(className);
+        // 解析所有变体（响应式 + 状态）
+        const { responsiveVariant, stateVariants, baseClass } = this.parseVariants(className);
 
-        // 使用 base class 查找静态类定义
-        const staticClassItem = userStaticClass.find(([k, v]) => k === baseClass);
+        // 使用 base class 查找静态类定义（static 类的 value 应该是 string）
+        const staticValue = baseClassNameMap ? baseClassNameMap.get(baseClass) : undefined;
 
-        if (staticClassItem !== undefined) {
+        if (typeof staticValue === 'string') {
           cssWrite.add(className);
-          // 使用原始 class 名（包含响应式前缀）生成 CSS
+          // 使用原始 class 名（包含所有变体前缀）生成 CSS
           const cssClassName = className.replaceAll('_', '-');
-          // 使用格式化器格式化CSS
-          let cssRule = this.cssFormatter.formatRule(cssClassName, staticClassItem[1]);
+          // 使用格式化器格式化CSS（传入状态变体用于生成伪类选择器）
+          let cssRule = this.cssFormatter.formatRule(cssClassName, staticValue, null, stateVariants);
 
           // 如果有响应式变体，用 @media 包裹
-          if (variant) {
-            cssRule = this.wrapWithMediaQuery(cssRule, variant);
+          if (responsiveVariant) {
+            cssRule = this.wrapWithMediaQuery(cssRule, responsiveVariant);
           }
 
           str += cssRule;

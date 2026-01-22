@@ -560,18 +560,25 @@ class Class2CSS {
       this.stateManager.setScanCompleted();
 
       // 如果是统一文件模式，执行初始写入（仅在非重建场景，重建场景已在 start() 中处理）
+      // 注意：appendDelta 模式的重建已在 start() 中通过 writeBaseWithDeltaMarker 处理，这里跳过
       if (this.stateManager.isInUnifiedFileMode() && preserveBaseline) {
-        this.logger.info('检测到统一文件模式，正在执行初始写入...');
-        await this.unifiedWriter.immediateWrite(
-          this.fullScanManager,
-          this.fileWriter,
-          'initial-scan'
-        );
-
-        // 如果是增量模式但未开启 rebuildOnStart，检查并报告未使用的 class
         const multiFile = this.configManager.getMultiFile();
-        if (multiFile?.output?.incrementalOnlyAdd && !multiFile?.output?.rebuildOnStart) {
-          await this.reportUnusedClasses();
+        const uniFileWriteMode = multiFile?.output?.uniFileWriteMode || 'rewrite';
+        // appendDelta 模式的重建已在 start() 中处理，这里跳过 immediateWrite（避免覆盖分区标记）
+        const isAppendDeltaMode = uniFileWriteMode === 'appendDelta';
+        
+        if (!isAppendDeltaMode) {
+          this.logger.info('检测到统一文件模式，正在执行初始写入...');
+          await this.unifiedWriter.immediateWrite(
+            this.fullScanManager,
+            this.fileWriter,
+            'initial-scan'
+          );
+
+          // 如果是增量模式但未开启 rebuildOnStart，检查并报告未使用的 class
+          if (multiFile?.output?.incrementalOnlyAdd && !multiFile?.output?.rebuildOnStart) {
+            await this.reportUnusedClasses();
+          }
         }
       }
 

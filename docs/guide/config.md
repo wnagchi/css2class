@@ -129,6 +129,44 @@ unitStrategy: {
 
 也可以先阅读概念页：[单位与转换策略](./units.md)。
 
+### variants 配置（响应式 + states 伪类）
+
+`variants` 用来声明可用的变体前缀（Tailwind 风格），当前支持：
+- **responsive**：`sm:` / `md:` / `lg:` / `xl:` / `2xl:`（通过 `@media(min-width:...)` 包裹）
+- **states**：`hover:` / `focus:` / `active:` / `disabled:` / `first:` / `last:` / `odd:` / `even:`（通过伪类选择器实现）
+
+示例（Web/小程序模板语法均可）：
+
+```html
+<!-- hover 伪类 -->
+<div class="hover:w-20 hover:bg-red"></div>
+
+<!-- focus 伪类 -->
+<input class="focus:w-30" />
+
+<!-- active 伪类 -->
+<button class="active:opacity-50"></button>
+
+<!-- 组合：响应式 + hover -->
+<div class="lg:hover:w-20"></div>
+```
+
+生成选择器示例（以 `hover:w-20` 为例）：
+
+```css
+.hover\:w-20:hover { width: 20px; }
+```
+
+`states` 映射规则：
+- `hover` → `:hover`
+- `focus` → `:focus`
+- `active` → `:active`
+- `disabled` → `:disabled`
+- `first` → `:first-child`
+- `last` → `:last-child`
+- `odd` → `:nth-child(odd)`
+- `even` → `:nth-child(even)`
+
 ### output 配置
 
 #### path

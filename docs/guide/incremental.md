@@ -95,21 +95,23 @@ module.exports = {
 
 ### 输出文件结构
 
-`appendDelta` 模式下输出文件会包含标记：
+为保证 **响应式（@media）永远不会因为“追加 base 规则”而被覆盖**，`appendDelta` 模式下输出文件会按“分区”组织（base 在前、media 在后），并带有稳定标记：
 
 ```css
-/* CLASS2CSS:BASE */
-.w-100 { width: 200rpx; }
-.m-10 { margin: 20rpx; }
-/* ... 其他基础样式 ... */
+/* CLASS2CSS:BASE_START */
+/* base：普通规则（不含 @media） */
+/* CLASS2CSS:BASE_END */
+
+/* CLASS2CSS:MEDIA_START */
+/* media：所有 @media(...) 块（始终在文件后半段） */
+/* CLASS2CSS:MEDIA_END */
 
 /* CLASS2CSS:DELTA_START */
-.new-class-1 { /* 新增的样式 */ }
-.new-class-2 { /* 新增的样式 */ }
 ```
 
-- `/* CLASS2CSS:BASE */`：启动重建写入的基础段（压缩/排序后的全量结果）
-- `/* CLASS2CSS:DELTA_START */`：增量追加段起点（运行期新增 class 会追加到该标记之后）
+- `/* CLASS2CSS:BASE_START */` ~ `/* CLASS2CSS:BASE_END */`：普通规则分区（不含 `@media`）
+- `/* CLASS2CSS:MEDIA_START */` ~ `/* CLASS2CSS:MEDIA_END */`：媒体查询分区（只放 `@media`）
+- `/* CLASS2CSS:DELTA_START */`：增量写入起点标记（用于识别该文件是 appendDelta 输出）
 
 ### 工作流程
 
@@ -117,11 +119,11 @@ module.exports = {
    - 读取旧输出文件，提取已存在的 class 作为基线
    - 执行全量扫描，清理上一次运行累积的多余规则
    - 生成 BASE CSS（全量生成，压缩+排序）
-   - 写入 BASE + DELTA_START 标记（覆盖写，清空旧 DELTA）
+   - **分区写入**：把 BASE CSS 拆分成 `base` 与 `@media` 两段，分别写入 `BASE_*` 与 `MEDIA_*` 分区
    - 报告未使用的 class（如果存在）
 
 2. **运行期**：
-   - 文件变更时，只追加新增 class 的 CSS 到 DELTA_START 之后
+   - 文件变更时，仅生成“新增 class”的 CSS\n+   - **分区插入**：新增的普通规则插入到 `BASE_END` 之前；新增的 `@media` 块插入到 `MEDIA_END` 之前（保证 `@media` 永远在后）
    - 新增的 class 自动加入 baseline，保证只增不删
 
 ### 优势
@@ -133,7 +135,7 @@ module.exports = {
 ### 注意事项
 
 - `rebuildOnStart` 必须为 `true`，否则历史垃圾无法自动清理
-- DELTA 段会随时间增长，建议定期重建（重启工具即可）
+- 建议定期重建（重启工具即可），以便清理旧规则、保证输出始终可控
 - 如果需要完全清理，可以手动删除输出文件后重启
 
 ## 标准模式 vs 增量模式

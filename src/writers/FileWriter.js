@@ -177,6 +177,7 @@ class FileWriter {
   }
 
   // 追加CSS到文件末尾（用于 appendDelta 模式）
+  // 新实现：分区插入 baseDelta 和 mediaDelta 到对应 marker 区域
   async appendCSS(cssContent, filePath, options = {}) {
     try {
       const multiFile = this.configManager.getMultiFile();
@@ -201,18 +202,137 @@ class FileWriter {
       // 确保输出目录存在
       await this.ensureDirectoryExists(path.dirname(outputPath));
 
-      // 追加内容到文件末尾（确保前后有换行，避免粘连）
       const contentToAppend = cssContent.trim();
-      if (contentToAppend) {
-        const appendContent = '\n' + contentToAppend + '\n';
-        await fs.appendFile(outputPath, appendContent, 'utf-8');
+      if (!contentToAppend) {
+        return {
+          success: true,
+          outputPath: outputPath,
+          cssLength: 0,
+        };
+      }
+
+      // 拆分 delta CSS 为 base 和 media
+      const CssFormatter = require('../utils/CssFormatter');
+      const cssFormat = this.configManager.getCssFormat();
+      const cssFormatter = new CssFormatter(cssFormat);
+      const { baseCss: baseDelta, mediaCss: mediaDelta, otherAtRulesPrefix: deltaPrefix } =
+        cssFormatter.splitBaseAndMedia(contentToAppend);
+
+      // 读取现有文件内容
+      let existingContent = '';
+      try {
+        existingContent = await fs.readFile(outputPath, 'utf-8');
+      } catch (error) {
+        // 文件不存在，使用分区插入写入新文件
+        if (error.code === 'ENOENT') {
+          return await this.writeBaseWithDeltaMarker(contentToAppend, filePath, options);
+        }
+        throw error;
+      }
+
+      // 检查是否存在分区 marker
+      const baseStartMarker = '/* CLASS2CSS:BASE_START */';
+      const baseEndMarker = '/* CLASS2CSS:BASE_END */';
+      const mediaStartMarker = '/* CLASS2CSS:MEDIA_START */';
+      const mediaEndMarker = '/* CLASS2CSS:MEDIA_END */';
+      const deltaStartMarker = '/* CLASS2CSS:DELTA_START */';
+
+      const hasPartitionMarkers =
+        existingContent.includes(baseStartMarker) &&
+        existingContent.includes(baseEndMarker) &&
+        existingContent.includes(mediaStartMarker) &&
+        existingContent.includes(mediaEndMarker);
+
+      if (!hasPartitionMarkers) {
+        // 回退策略：旧文件格式，先做一次全文件 normalize 并写入分区结构
+        this.eventBus.emit('file:css:append:fallback', {
+          message: 'Output file lacks partition markers, normalizing and rewriting',
+          outputPath,
+        });
+
+        // 合并旧内容和新内容，做 normalize
+        const mergedContent = existingContent + '\n' + contentToAppend;
+        const normalizedContent = cssFormatter.normalizeResponsiveOrder(mergedContent);
+        const { baseCss, mediaCss, otherAtRulesPrefix, suffix } =
+          cssFormatter.splitBaseAndMedia(normalizedContent);
+
+        const baseStartMarkerLine = '/* CLASS2CSS:BASE_START */\n';
+        const baseEndMarkerLine = '\n/* CLASS2CSS:BASE_END */\n';
+        const mediaStartMarkerLine = '/* CLASS2CSS:MEDIA_START */\n';
+        const mediaEndMarkerLine = '\n/* CLASS2CSS:MEDIA_END */\n';
+        const deltaStartMarkerLine = '\n/* CLASS2CSS:DELTA_START */\n';
+
+        const rewrittenContent =
+          otherAtRulesPrefix +
+          baseStartMarkerLine +
+          baseCss.trim() +
+          baseEndMarkerLine +
+          mediaStartMarkerLine +
+          mediaCss.trim() +
+          mediaEndMarkerLine +
+          deltaStartMarkerLine +
+          (suffix ? '\n' + suffix.trim() : '');
+
+        await this.fileUtils.writeFile(outputPath, rewrittenContent, 'utf-8');
 
         this.eventBus.emit('file:css:appended', {
           sourceFile: filePath,
           outputFile: outputPath,
           cssLength: cssContent.length,
         });
+
+        return {
+          success: true,
+          outputPath: outputPath,
+          cssLength: cssContent.length,
+        };
       }
+
+      // 分区插入：找到 marker 位置并插入对应内容
+      let newContent = existingContent;
+
+      // 插入 baseDelta 到 BASE_END 之前
+      if (baseDelta.trim()) {
+        const baseEndIdx = newContent.indexOf(baseEndMarker);
+        if (baseEndIdx !== -1) {
+          const beforeBaseEnd = newContent.slice(0, baseEndIdx);
+          const afterBaseEnd = newContent.slice(baseEndIdx);
+          // 如果 base 区域不为空，添加换行分隔
+          const separator = beforeBaseEnd.trim().endsWith('}') ? '\n' : '';
+          newContent = beforeBaseEnd + separator + baseDelta.trim() + '\n' + afterBaseEnd;
+        }
+      }
+
+      // 插入 mediaDelta 到 MEDIA_END 之前
+      if (mediaDelta.trim()) {
+        const mediaEndIdx = newContent.indexOf(mediaEndMarker);
+        if (mediaEndIdx !== -1) {
+          const beforeMediaEnd = newContent.slice(0, mediaEndIdx);
+          const afterMediaEnd = newContent.slice(mediaEndIdx);
+          // 如果 media 区域不为空，添加换行分隔
+          const separator = beforeMediaEnd.trim().endsWith('}') ? '\n' : '';
+          newContent = beforeMediaEnd + separator + mediaDelta.trim() + '\n' + afterMediaEnd;
+        }
+      }
+
+      // 插入 deltaPrefix（其他 at-rules）到 BASE_START 之前（如果有）
+      if (deltaPrefix.trim()) {
+        const baseStartIdx = newContent.indexOf(baseStartMarker);
+        if (baseStartIdx !== -1) {
+          const beforeBaseStart = newContent.slice(0, baseStartIdx);
+          const afterBaseStart = newContent.slice(baseStartIdx);
+          newContent = beforeBaseStart + deltaPrefix.trim() + '\n' + afterBaseStart;
+        }
+      }
+
+      // 写回文件
+      await this.fileUtils.writeFile(outputPath, newContent, 'utf-8');
+
+      this.eventBus.emit('file:css:appended', {
+        sourceFile: filePath,
+        outputFile: outputPath,
+        cssLength: cssContent.length,
+      });
 
       return {
         success: true,
@@ -254,10 +374,32 @@ class FileWriter {
       // 确保输出目录存在
       await this.ensureDirectoryExists(path.dirname(outputPath));
 
-      // 构建包含BASE标记和DELTA_START标记的内容
-      const baseMarker = '/* CLASS2CSS:BASE */\n';
-      const deltaMarker = '\n/* CLASS2CSS:DELTA_START */\n';
-      const fullContent = baseMarker + baseCssContent.trim() + deltaMarker;
+      // 拆分 CSS 为 base 和 media 两部分（用于分区写入）
+      // 注意：baseCssContent 已经是格式化后的内容（由 generateUnifiedCSS 处理）
+      const CssFormatter = require('../utils/CssFormatter');
+      const cssFormat = this.configManager.getCssFormat();
+      const cssFormatter = new CssFormatter(cssFormat);
+      const { baseCss, mediaCss, otherAtRulesPrefix, suffix } = cssFormatter.splitBaseAndMedia(baseCssContent);
+
+      // 构建分区标记结构
+      // 注意：在 compressed 格式下，标记会被保留（compressCSS 已更新以保留这些标记）
+      const baseStartMarker = '/* CLASS2CSS:BASE_START */\n';
+      const baseEndMarker = '\n/* CLASS2CSS:BASE_END */\n';
+      const mediaStartMarker = '/* CLASS2CSS:MEDIA_START */\n';
+      const mediaEndMarker = '\n/* CLASS2CSS:MEDIA_END */\n';
+      const deltaStartMarker = '\n/* CLASS2CSS:DELTA_START */\n';
+
+      // 按固定顺序写入：prefix -> BASE -> MEDIA -> DELTA（初始为空）
+      const fullContent =
+        (otherAtRulesPrefix ? otherAtRulesPrefix + '\n' : '') +
+        baseStartMarker +
+        baseCss.trim() +
+        baseEndMarker +
+        mediaStartMarker +
+        mediaCss.trim() +
+        mediaEndMarker +
+        deltaStartMarker +
+        (suffix ? '\n' + suffix.trim() : '');
 
       // 覆盖写入文件（清空旧内容）
       await this.fileUtils.writeFile(outputPath, fullContent, 'utf-8');
