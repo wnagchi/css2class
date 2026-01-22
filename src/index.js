@@ -724,6 +724,9 @@ class Class2CSS {
         const CssFormatter = require('./utils/CssFormatter');
         const cssFormatter = new CssFormatter(cssFormat);
 
+        // 规范化响应式顺序：保证 base 在前、@media 在后，避免覆盖导致“看起来失效”
+        cssContent = cssFormatter.normalizeResponsiveOrder(cssContent);
+
         // 如果启用了排序，对CSS规则进行字母排序（在格式化之前排序）
         const sortClasses = this.configManager.getSortClasses();
         if (sortClasses) {
@@ -813,10 +816,12 @@ class Class2CSS {
         .filter(Boolean)
         .join('\n');
 
-      // 格式化（压缩），但不排序（因为只是追加）
+      // 规范化响应式顺序：保证 base 在前、@media 在后，避免覆盖导致“看起来失效”
+      // appendDelta 不做字母排序，但仍需要保证媒体查询顺序正确，避免在增量段里发生覆盖问题
       const cssFormat = this.configManager.getCssFormat();
       const CssFormatter = require('./utils/CssFormatter');
       const cssFormatter = new CssFormatter(cssFormat);
+      cssContent = cssFormatter.normalizeResponsiveOrder(cssContent);
       cssContent = cssFormatter.formatCSS(cssContent, cssFormat);
 
       return cssContent;

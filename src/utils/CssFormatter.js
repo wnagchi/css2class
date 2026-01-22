@@ -191,69 +191,271 @@ class CssFormatter {
     return '';
   }
 
-  // 对CSS规则进行字母排序
-  sortCSSRules(cssString) {
+  // 规范化响应式规则顺序：
+  // - 保证普通规则（base）在前
+  // - 保证 @media 块在后（并按 min-width 升序稳定排序）
+  // 该步骤不做“字母排序”，只解决媒体查询被覆盖导致的失效问题。
+  normalizeResponsiveOrder(cssString) {
     if (!cssString || typeof cssString !== 'string') {
       return '';
     }
 
-    // 解析CSS规则：逐字符解析，跟踪大括号嵌套
-    const rules = [];
-    let currentRule = '';
-    let braceCount = 0;
-    let selector = '';
+    const blocks = [];
+    let prefix = '';
+    let suffix = '';
+
     let i = 0;
+    let braceCount = 0;
+    let blockStart = -1;
+    let cursor = 0;
 
     while (i < cssString.length) {
       const char = cssString[i];
 
       if (char === '{') {
         if (braceCount === 0) {
-          // 找到选择器结束
-          selector = currentRule.trim();
-          currentRule = '{';
-        } else {
-          currentRule += char;
+          const preSelector = cssString.slice(cursor, i);
+
+          // 尽量把无大括号语句（常见：@import/@charset）保留在 prefix
+          const lastSemicolon = preSelector.lastIndexOf(';');
+          if (lastSemicolon !== -1) {
+            const before = preSelector.slice(0, lastSemicolon + 1);
+            if (blocks.length === 0) {
+              prefix += before;
+            }
+            blockStart = cursor + lastSemicolon + 1;
+          } else {
+            blockStart = cursor;
+          }
         }
         braceCount++;
       } else if (char === '}') {
-        currentRule += char;
         braceCount--;
-        if (braceCount === 0) {
-          // 找到规则结束
-          // 清理选择器：移除点号前缀用于排序（注意：转义字符不需要处理，排序时保持原样）
-          const cleanSelector = selector.replace(/^\./, '').trim();
+        if (braceCount === 0 && blockStart !== -1) {
+          const fullRule = cssString.slice(blockStart, i + 1);
+          const openBraceIdx = fullRule.indexOf('{');
+          const selectorRaw = openBraceIdx === -1 ? '' : fullRule.slice(0, openBraceIdx);
+          const selectorTrim = selectorRaw.trim();
+          const cleanSelector = selectorTrim.replace(/^\./, '').trim();
+
           if (cleanSelector) {
-            rules.push({
-              selector: cleanSelector,
-              fullRule: selector + currentRule,
+            blocks.push({
+              selectorTrim,
+              fullRule,
+              index: blocks.length,
             });
           }
-          currentRule = '';
-          selector = '';
+
+          cursor = i + 1;
+          blockStart = -1;
         }
-      } else {
-        currentRule += char;
       }
+
       i++;
     }
 
-    // 如果没有匹配到规则，返回原字符串
-    if (rules.length === 0) {
+    if (cursor < cssString.length) {
+      suffix = cssString.slice(cursor);
+    }
+
+    if (blocks.length === 0) {
       return cssString;
     }
 
-    // 按选择器名称进行字母排序（不区分大小写）
-    rules.sort((a, b) => {
+    const isMediaBlock = (b) => typeof b.selectorTrim === 'string' && b.selectorTrim.startsWith('@media');
+    const isAtRuleBlock = (b) => typeof b.selectorTrim === 'string' && b.selectorTrim.startsWith('@');
+
+    const parseMinWidth = (selectorTrim) => {
+      if (!selectorTrim) return Number.POSITIVE_INFINITY;
+      const m = selectorTrim.match(/min-width\s*:\s*([^)]+)\)/i);
+      if (!m) return Number.POSITIVE_INFINITY;
+      const raw = String(m[1] || '').trim();
+      const num = parseFloat(raw);
+      return Number.isFinite(num) ? num : Number.POSITIVE_INFINITY;
+    };
+
+    const baseBlocks = [];
+    const mediaBlocks = [];
+    const otherAtBlocks = [];
+
+    for (const b of blocks) {
+      if (isMediaBlock(b)) {
+        mediaBlocks.push(b);
+      } else if (isAtRuleBlock(b)) {
+        otherAtBlocks.push(b);
+      } else {
+        baseBlocks.push(b);
+      }
+    }
+
+    // 不改变 base 的原始顺序（稳定）
+    baseBlocks.sort((a, b) => a.index - b.index);
+    otherAtBlocks.sort((a, b) => a.index - b.index);
+
+    // media 按 min-width 升序（同断点保持稳定）
+    mediaBlocks.sort((a, b) => {
+      const wa = parseMinWidth(a.selectorTrim);
+      const wb = parseMinWidth(b.selectorTrim);
+      if (wa < wb) return -1;
+      if (wa > wb) return 1;
+      return a.index - b.index;
+    });
+
+    return (
+      prefix +
+      otherAtBlocks.map((b) => b.fullRule).join('') +
+      baseBlocks.map((b) => b.fullRule).join('') +
+      mediaBlocks.map((b) => b.fullRule).join('') +
+      suffix
+    );
+  }
+
+  // 对CSS规则进行字母排序
+  sortCSSRules(cssString) {
+    if (!cssString || typeof cssString !== 'string') {
+      return '';
+    }
+
+    // 解析顶层块（支持 @media 嵌套），并按语义分组排序。
+    // 目标：避免 @media 块被排到普通规则前面导致覆盖失效（base 覆盖 media）。
+    // 同时尽量保留非块语句（如 @import/@charset）在输出中的存在。
+
+    const blocks = [];
+    let prefix = '';
+    let suffix = '';
+
+    let i = 0;
+    let braceCount = 0;
+    let blockStart = -1;
+    let selectorStart = 0;
+    let cursor = 0;
+
+    while (i < cssString.length) {
+      const char = cssString[i];
+
+      if (char === '{') {
+        if (braceCount === 0) {
+          // 顶层块开始：selector 在 cursor..i 之间
+          const preSelector = cssString.slice(cursor, i);
+
+          // 尽量把无大括号的 at-rule 语句（常见：@import/@charset）留在 prefix 中
+          // 规则：如果 preSelector 中有分号，将最后一个分号之前的内容视为 prefix
+          const lastSemicolon = preSelector.lastIndexOf(';');
+          if (lastSemicolon !== -1) {
+            const before = preSelector.slice(0, lastSemicolon + 1);
+            const after = preSelector.slice(lastSemicolon + 1);
+            // prefix 只在第一个块之前累积
+            if (blocks.length === 0) {
+              prefix += before;
+            }
+            selectorStart = cursor + lastSemicolon + 1;
+            // 把分号后的空白等内容归到块里，避免丢失格式
+            blockStart = selectorStart;
+            // after 这段会包含在 blockStart.. 中，不需要单独处理
+          } else {
+            selectorStart = cursor;
+            blockStart = selectorStart;
+          }
+        }
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0 && blockStart !== -1) {
+          // 顶层块结束
+          const fullRule = cssString.slice(blockStart, i + 1);
+          const openBraceIdx = fullRule.indexOf('{');
+          const selectorRaw = openBraceIdx === -1 ? '' : fullRule.slice(0, openBraceIdx);
+          const selectorTrim = selectorRaw.trim();
+
+          // 清理选择器：移除点号前缀用于排序（注意：转义字符不需要处理，排序时保持原样）
+          const cleanSelector = selectorTrim.replace(/^\./, '').trim();
+
+          if (cleanSelector) {
+            blocks.push({
+              selector: cleanSelector,
+              selectorTrim,
+              fullRule,
+              index: blocks.length, // 用于稳定排序
+            });
+          }
+
+          cursor = i + 1;
+          blockStart = -1;
+          selectorStart = cursor;
+        }
+      }
+
+      i++;
+    }
+
+    // 保留尾部非块内容（例如末尾注释/换行）
+    if (cursor < cssString.length) {
+      suffix = cssString.slice(cursor);
+    }
+
+    // 如果没有解析到块，直接返回原字符串
+    if (blocks.length === 0) {
+      return cssString;
+    }
+
+    const isMediaBlock = (b) => typeof b.selectorTrim === 'string' && b.selectorTrim.startsWith('@media');
+    const isAtRuleBlock = (b) => typeof b.selectorTrim === 'string' && b.selectorTrim.startsWith('@');
+
+    const parseMinWidth = (selectorTrim) => {
+      if (!selectorTrim) return Number.POSITIVE_INFINITY;
+      // 兼容：@media(min-width:640px) / @media (min-width: 640px)
+      const m = selectorTrim.match(/min-width\s*:\s*([^)]+)\)/i);
+      if (!m) return Number.POSITIVE_INFINITY;
+      const raw = String(m[1] || '').trim();
+      const num = parseFloat(raw);
+      return Number.isFinite(num) ? num : Number.POSITIVE_INFINITY;
+    };
+
+    const baseBlocks = [];
+    const mediaBlocks = [];
+    const otherAtBlocks = [];
+
+    for (const b of blocks) {
+      if (isMediaBlock(b)) {
+        mediaBlocks.push(b);
+      } else if (isAtRuleBlock(b)) {
+        otherAtBlocks.push(b);
+      } else {
+        baseBlocks.push(b);
+      }
+    }
+
+    // base：按选择器字母排序（不区分大小写）
+    baseBlocks.sort((a, b) => {
       const selectorA = a.selector.toLowerCase();
       const selectorB = b.selector.toLowerCase();
       if (selectorA < selectorB) return -1;
       if (selectorA > selectorB) return 1;
-      return 0;
+      return a.index - b.index; // 稳定
     });
 
-    // 重新组合CSS规则
-    return rules.map(rule => rule.fullRule).join('');
+    // media：按 min-width 升序（同断点保持稳定）
+    mediaBlocks.sort((a, b) => {
+      const wa = parseMinWidth(a.selectorTrim);
+      const wb = parseMinWidth(b.selectorTrim);
+      if (wa < wb) return -1;
+      if (wa > wb) return 1;
+      return a.index - b.index;
+    });
+
+    // 组合顺序：
+    // - prefix（@import/@charset 等）
+    // - 其他 at-rule（保持原顺序）
+    // - base 规则（排序后）
+    // - @media（最后，保证覆盖方向正确）
+    // - suffix
+    return (
+      prefix +
+      otherAtBlocks.map((b) => b.fullRule).join('') +
+      baseBlocks.map((b) => b.fullRule).join('') +
+      mediaBlocks.map((b) => b.fullRule).join('') +
+      suffix
+    );
   }
 }
 

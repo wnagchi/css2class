@@ -128,6 +128,9 @@ class UnifiedWriter {
         .filter(Boolean)
         .join('\n');
 
+      // 规范化响应式顺序：保证 base 在前、@media 在后，避免覆盖导致“看起来失效”
+      cssContent = this.cssFormatter.normalizeResponsiveOrder(cssContent);
+
       // 如果启用了排序，对CSS规则进行字母排序（在格式化之前排序）
       const sortClasses = this.configManager.getSortClasses();
       if (sortClasses) {
